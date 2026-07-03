@@ -61,4 +61,57 @@ final class MetricsTests: XCTestCase {
     func testCountdownPast() {
         XCTAssertEqual(countdownText(to: now.addingTimeInterval(-10), now: now), "resetting")
     }
+
+    // MARK: - Threshold boundary pinning
+
+    func testRemainingExactlyTenIsNotForcedRed() {
+        // percent 90 -> remaining 10 -> rule 1's `< 10` is false, falls through to pace.
+        // elapsed 1.0 -> greenThresh 1.0 * 1.0 = 1.0; used 0.9 <= 1.0 -> green.
+        let c = burnRateColor(percent: 90, resetsAt: resets(afterFractionElapsed: 1.0, window: week),
+                              windowLength: week, now: now)
+        XCTAssertEqual(c, .green)
+    }
+
+    func testUsedExactlyFivePercentIsNotForcedGreen() {
+        // percent 5 -> used 0.05 -> rule 2's `< 0.05` is false, falls through to pace.
+        // elapsed 0.01 -> greenThresh 0.01, amberThresh 0.015; used 0.05 exceeds both -> red.
+        let c = burnRateColor(percent: 5, resetsAt: resets(afterFractionElapsed: 0.01, window: week),
+                              windowLength: week, now: now)
+        XCTAssertEqual(c, .red)
+    }
+
+    func testGreenAmberSeamEqualityIsGreen() {
+        // used 0.5, elapsed 0.5 -> used == elapsed * greenFactor(1.0) exactly -> rule 4's `<=` -> green.
+        let c = burnRateColor(percent: 50, resetsAt: resets(afterFractionElapsed: 0.5, window: week),
+                              windowLength: week, now: now)
+        XCTAssertEqual(c, .green)
+    }
+
+    func testAmberRedSeamEqualityIsAmber() {
+        // used 0.75, elapsed 0.5 -> used == elapsed * amberFactor(1.5) exactly -> rule 5's `<=` -> amber.
+        let c = burnRateColor(percent: 75, resetsAt: resets(afterFractionElapsed: 0.5, window: week),
+                              windowLength: week, now: now)
+        XCTAssertEqual(c, .amber)
+    }
+
+    func testElapsedClampHighWhenResetIsInThePast() {
+        // resetsAt more than a window in the past -> timeUntilReset very negative -> elapsed
+        // pre-clamp = 2.0, clamped to 1. used 0.5 <= elapsed(1.0) * greenFactor(1.0) -> green.
+        let c = burnRateColor(percent: 50, resetsAt: resets(afterFractionElapsed: 2.0, window: week),
+                              windowLength: week, now: now)
+        XCTAssertEqual(c, .green)
+    }
+
+    func testElapsedClampLowWhenResetIsBeyondAFullWindow() {
+        // resetsAt more than a full window in the future -> timeUntilReset > windowLength ->
+        // elapsed pre-clamp = -1.0, clamped to 0.001. amberThresh = 0.0015; used 0.2 far exceeds
+        // it -> red.
+        let c = burnRateColor(percent: 20, resetsAt: resets(afterFractionElapsed: -1.0, window: week),
+                              windowLength: week, now: now)
+        XCTAssertEqual(c, .red)
+    }
+
+    func testCountdownAtExactlyZeroSeconds() {
+        XCTAssertEqual(countdownText(to: now, now: now), "resetting")
+    }
 }
