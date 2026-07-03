@@ -1,11 +1,20 @@
 import XCTest
 @testable import CCMeterCore
 
-private struct FakeTransport: Transport {
+private final class FakeTransport: Transport {
     let status: Int
     let data: Data
     var error: Error?
+    var capturedRequest: URLRequest?
+
+    init(status: Int, data: Data, error: Error? = nil) {
+        self.status = status
+        self.data = data
+        self.error = error
+    }
+
     func send(_ request: URLRequest) async throws -> HTTPResponse {
+        capturedRequest = request
         if let error { throw error }
         return HTTPResponse(status: status, data: data)
     }
@@ -54,6 +63,29 @@ final class UsageClientTests: XCTestCase {
         let err = NSError(domain: "test", code: -1)
         let result = await client(status: 0, data: Data(), error: err).fetch()
         if case .network = result.failureError { } else { XCTFail("expected network error") }
+    }
+
+    func testOtherStatusMapsToNetwork() async {
+        let result = await client(status: 500, data: Data()).fetch()
+        if case .network(let message) = result.failureError {
+            XCTAssertTrue(message.contains("500"))
+        } else {
+            XCTFail("expected network error for HTTP 500")
+        }
+    }
+
+    func testSendsCorrectRequest() async {
+        let transport = FakeTransport(status: 200, data: Fixtures.usageJSON)
+        let client = UsageClient(tokenProvider: FakeToken(token: "sk-test"),
+                                 transport: transport,
+                                 now: { Date(timeIntervalSince1970: 1783100000) })
+        _ = await client.fetch()
+        let req = transport.capturedRequest
+        XCTAssertEqual(req?.url?.absoluteString, "https://api.anthropic.com/api/oauth/usage")
+        XCTAssertEqual(req?.httpMethod, "GET")
+        XCTAssertEqual(req?.value(forHTTPHeaderField: "Authorization"), "Bearer sk-test")
+        XCTAssertEqual(req?.value(forHTTPHeaderField: "anthropic-beta"), "oauth-2025-04-20")
+        XCTAssertEqual(req?.value(forHTTPHeaderField: "Content-Type"), "application/json")
     }
 }
 
