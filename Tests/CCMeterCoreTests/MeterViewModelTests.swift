@@ -57,6 +57,17 @@ final class MeterViewModelTests: XCTestCase {
         guard case .error(.unauthorized) = vm.state else { return XCTFail("expected unauthorized") }
     }
 
+    func testHardErrorReplacesLastKnownOk() async {
+        let stub = StubClient(.success(sampleUsage()))
+        let vm = MeterViewModel(client: stub, interval: 30, now: { self.now })
+        await vm.refresh()                        // reach .ok
+        stub.result = .failure(.unauthorized)     // hard error
+        await vm.refresh()
+        guard case .error(.unauthorized) = vm.state else {
+            return XCTFail("expected hard error to replace last-known .ok")
+        }
+    }
+
     func testTransientErrorKeepsLastKnown() async {
         let stub = StubClient(.success(sampleUsage()))
         let vm = MeterViewModel(client: stub, interval: 30, now: { self.now })
@@ -64,5 +75,18 @@ final class MeterViewModelTests: XCTestCase {
         stub.result = .failure(.rateLimited)
         await vm.refresh()                       // transient -> keep .ok
         guard case .ok = vm.state else { return XCTFail("expected still ok") }
+        XCTAssertEqual(vm.rows.count, 3)
+        XCTAssertEqual(vm.compact?.percent, 54)
+    }
+
+    func testCompactFallsBackToMaxWhenNoneActive() async {
+        let week: TimeInterval = 7 * 24 * 3600
+        let usage = Usage(limits: [
+            UsageLimit(kind: .session, percent: 12, resetsAt: now.addingTimeInterval(3600), isActive: false),
+            UsageLimit(kind: .weeklyAll, percent: 40, resetsAt: now.addingTimeInterval(week / 2), isActive: false)
+        ], fetchedAt: now)
+        let vm = MeterViewModel(client: StubClient(.success(usage)), interval: 30, now: { self.now })
+        await vm.refresh()
+        XCTAssertEqual(vm.compact?.percent, 40)   // no active -> max among all
     }
 }

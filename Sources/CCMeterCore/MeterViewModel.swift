@@ -41,9 +41,8 @@ public final class MeterViewModel: ObservableObject {
     public func start() {
         refreshNow()
         timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
-            // The Timer callback is nonisolated; hop to the main actor before
-            // touching this main-actor-isolated view model.
-            Task { @MainActor in self?.refreshNow() }
+            // The Timer callback is nonisolated; hop to the main actor and refresh.
+            Task { @MainActor in await self?.refresh() }
         }
     }
 
