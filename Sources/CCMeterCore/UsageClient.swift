@@ -58,11 +58,14 @@ public struct UsageClient: UsageFetching {
                 let wire = try JSONDecoder().decode(UsageResponse.self, from: response.data)
                 return .success(wire.toUsage(now: now()))
             } catch {
-                return .failure(.network("decode failed: \(error)"))
+                // A decode failure means the response shape changed - deterministic,
+                // not a transient blip - so surface it rather than keep stale data.
+                return .failure(.badResponse("decode failed: \(error)"))
             }
-        case 401: return .failure(.unauthorized)
+        case 401, 403: return .failure(.unauthorized)
         case 429: return .failure(.rateLimited)
-        default: return .failure(.network("HTTP \(response.status)"))
+        case 500...599: return .failure(.network("HTTP \(response.status)"))
+        default: return .failure(.badResponse("HTTP \(response.status)"))
         }
     }
 }

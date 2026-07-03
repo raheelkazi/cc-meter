@@ -50,7 +50,11 @@ public enum UsageError: Error, Equatable {
     case noCredentials
     case unauthorized
     case rateLimited
+    // Transient connectivity blip. Safe to keep showing last-known data and retry.
     case network(String)
+    // Deterministic response problem (undecodable body, forbidden, unexpected
+    // status). Retrying will not fix it, so it must surface, not be kept stale.
+    case badResponse(String)
 }
 
 public enum MeterColor: Equatable {

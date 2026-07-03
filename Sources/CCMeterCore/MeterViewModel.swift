@@ -22,6 +22,8 @@ public struct MeterRow: Identifiable {
 public final class MeterViewModel: ObservableObject {
     @Published public private(set) var state: MeterState = .loading
     @Published public var displayMode: DisplayMode = .used
+    /// Time of the last successful fetch, backing the "updated ..." staleness cue.
+    @Published public private(set) var lastUpdated: Date?
 
     private let client: UsageFetching
     private let interval: TimeInterval
@@ -54,6 +56,7 @@ public final class MeterViewModel: ObservableObject {
         switch result {
         case .success(let usage):
             state = .ok(usage)
+            lastUpdated = now()
         case .failure(let error):
             if case .ok = state, isTransient(error) {
                 // Keep last-known data on transient errors; do not disrupt display.
@@ -70,8 +73,20 @@ public final class MeterViewModel: ObservableObject {
     private func isTransient(_ error: UsageError) -> Bool {
         switch error {
         case .rateLimited, .network: return true
-        case .noCredentials, .unauthorized: return false
+        case .noCredentials, .unauthorized, .badResponse: return false
         }
+    }
+
+    /// Human "updated ..." cue for the last successful fetch, so kept-stale data
+    /// (shown after a transient failure) is visibly dated rather than silently old.
+    public var lastUpdatedText: String? {
+        guard let lastUpdated else { return nil }
+        let secs = Int(now().timeIntervalSince(lastUpdated))
+        if secs < 10 { return "updated just now" }
+        if secs < 60 { return "updated \(secs)s ago" }
+        let mins = secs / 60
+        if mins < 60 { return "updated \(mins)m ago" }
+        return "updated \(mins / 60)h ago"
     }
 
     /// Rounds a limit's used percent and colors it by burn rate. Shared by the

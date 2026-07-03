@@ -87,6 +87,31 @@ final class UsageClientTests: XCTestCase {
         XCTAssertEqual(req?.value(forHTTPHeaderField: "anthropic-beta"), "oauth-2025-04-20")
         XCTAssertEqual(req?.value(forHTTPHeaderField: "Content-Type"), "application/json")
     }
+
+    func testDecodeFailureMapsToBadResponse() async {
+        // 200 with an undecodable body is deterministic -> badResponse (not transient).
+        let result = await client(status: 200, data: Data("not json".utf8)).fetch()
+        if case .badResponse(let message) = result.failureError {
+            XCTAssertTrue(message.contains("decode"))
+        } else {
+            XCTFail("expected badResponse for an undecodable 200 body")
+        }
+    }
+
+    func testForbiddenMapsToUnauthorized() async {
+        // 403 is a hard credential/permission error, not a transient blip.
+        let result = await client(status: 403, data: Data()).fetch()
+        XCTAssertEqual(result.failureError, .unauthorized)
+    }
+
+    func testUnexpectedClientStatusMapsToBadResponse() async {
+        let result = await client(status: 404, data: Data()).fetch()
+        if case .badResponse(let message) = result.failureError {
+            XCTAssertTrue(message.contains("404"))
+        } else {
+            XCTFail("expected badResponse for HTTP 404")
+        }
+    }
 }
 
 private extension Result where Failure == UsageError {

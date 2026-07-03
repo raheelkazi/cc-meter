@@ -23,6 +23,10 @@ struct PopoverView: View {
             HStack {
                 Button("Refresh") { viewModel.refreshNow() }
                 Spacer()
+                if let updated = viewModel.lastUpdatedText {
+                    Text(updated).font(.caption2).foregroundStyle(.tertiary)
+                    Spacer()
+                }
                 Button("Quit") { NSApplication.shared.terminate(nil) }
             }
             .font(.caption)
@@ -79,6 +83,11 @@ struct PopoverView: View {
         case .network(let message):
             VStack(alignment: .leading, spacing: 2) {
                 Text("Network error. Retrying...").foregroundStyle(.secondary)
+                Text(message).font(.caption2).foregroundStyle(.tertiary)
+            }
+        case .badResponse(let message):
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Unexpected response from the usage service.").foregroundStyle(.secondary)
                 Text(message).font(.caption2).foregroundStyle(.tertiary)
             }
         }
