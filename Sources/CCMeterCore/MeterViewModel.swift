@@ -22,7 +22,6 @@ public struct MeterRow: Identifiable {
 public final class MeterViewModel: ObservableObject {
     @Published public private(set) var state: MeterState = .loading
     @Published public var displayMode: DisplayMode = .used
-    @Published public private(set) var lastUpdated: Date?
 
     private let client: UsageFetching
     private let interval: TimeInterval
@@ -55,7 +54,6 @@ public final class MeterViewModel: ObservableObject {
         switch result {
         case .success(let usage):
             state = .ok(usage)
-            lastUpdated = now()
         case .failure(let error):
             if case .ok = state, isTransient(error) {
                 // Keep last-known data on transient errors; do not disrupt display.
@@ -76,30 +74,35 @@ public final class MeterViewModel: ObservableObject {
         }
     }
 
+    /// Rounds a limit's used percent and colors it by burn rate. Shared by the
+    /// menu-bar badge (compact) and the popover rows so the mapping lives once.
+    private func summarize(_ limit: UsageLimit, at clock: Date) -> (percent: Int, color: MeterColor) {
+        let color = burnRateColor(percent: limit.percent, resetsAt: limit.resetsAt,
+                                  windowLength: limit.kind.length, now: clock)
+        return (Int(limit.percent.rounded()), color)
+    }
+
     public var compact: (percent: Int, color: MeterColor)? {
         guard case .ok(let usage) = state else { return nil }
         let active = usage.limits.filter { $0.isActive }
         let pool = active.isEmpty ? usage.limits : active
         guard let top = pool.max(by: { $0.percent < $1.percent }) else { return nil }
-        let color = burnRateColor(percent: top.percent, resetsAt: top.resetsAt,
-                                  windowLength: top.kind.length, now: now())
-        return (Int(top.percent.rounded()), color)
+        return summarize(top, at: now())
     }
 
     public var rows: [MeterRow] {
         guard case .ok(let usage) = state else { return [] }
         let mode = displayMode
         let clock = now()
-        return usage.limits.map { limit in
-            let usedPct = Int(limit.percent.rounded())
-            let displayPercent = mode == .used ? usedPct : (100 - usedPct)
-            let color = burnRateColor(percent: limit.percent, resetsAt: limit.resetsAt,
-                                      windowLength: limit.kind.length, now: clock)
-            return MeterRow(id: limit.kind.label,
+        return usage.limits.enumerated().map { index, limit in
+            let used = summarize(limit, at: clock)
+            let displayPercent = mode == .used ? used.percent : (100 - used.percent)
+            // Index-prefixed id stays unique even if two windows share a label.
+            return MeterRow(id: "\(index)-\(limit.kind.label)",
                             label: limit.kind.label,
                             displayPercent: displayPercent,
                             barFraction: Double(displayPercent) / 100.0,
-                            color: color,
+                            color: used.color,
                             countdown: countdownText(to: limit.resetsAt, now: clock))
         }
     }

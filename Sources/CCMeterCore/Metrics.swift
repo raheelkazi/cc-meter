@@ -16,8 +16,7 @@ public func burnRateColor(percent: Double,
     if used < 0.05 { return .green }   // guard against false-red right after a reset
 
     let timeUntilReset = resetsAt.timeIntervalSince(now)
-    var elapsed = (windowLength - timeUntilReset) / windowLength
-    elapsed = min(max(elapsed, 0.001), 1)
+    let elapsed = min(max((windowLength - timeUntilReset) / windowLength, 0.001), 1)
 
     if used <= elapsed * greenFactor { return .green }
     if used <= elapsed * amberFactor { return .amber }

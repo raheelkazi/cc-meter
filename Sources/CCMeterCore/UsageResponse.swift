@@ -28,17 +28,16 @@ public struct UsageResponse: Decodable {
     }
 
     public func toUsage(now: Date) -> Usage {
-        var out: [UsageLimit] = []
-        for l in (limits ?? []) {
+        let mapped = (limits ?? []).compactMap { l -> UsageLimit? in
             guard let kind = WindowKind(kindString: l.kind, scopeModel: l.scope?.model?.displayName),
                   let resetsRaw = l.resetsAt,
-                  let resetsAt = ISODate.parse(resetsRaw) else { continue }
-            out.append(UsageLimit(kind: kind,
-                                  percent: l.percent,
-                                  resetsAt: resetsAt,
-                                  isActive: l.isActive ?? false))
+                  let resetsAt = ISODate.parse(resetsRaw) else { return nil }
+            return UsageLimit(kind: kind,
+                              percent: l.percent,
+                              resetsAt: resetsAt,
+                              isActive: l.isActive ?? false)
         }
-        return Usage(limits: out, fetchedAt: now)
+        return Usage(limits: mapped, fetchedAt: now)
     }
 }
 
