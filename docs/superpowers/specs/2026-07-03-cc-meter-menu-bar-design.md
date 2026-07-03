@@ -71,7 +71,7 @@ dependency and are unit-testable in isolation.
 ### 2. `MeterViewModel` (state + logic)
 
 - **Does:** owns the polling timer, current state, and derived display values.
-- **How:** every `refreshInterval` (default 60s) calls `UsageClient.fetch()` and
+- **How:** every `refreshInterval` (default 30s) calls `UsageClient.fetch()` and
   publishes a `MeterState` (`.loading`, `.ok(Usage)`, `.error(UsageError)`).
   Computes burn-rate color per window and holds the Remaining/Used toggle.
 - **Depends on:** `UsageClient` only.
@@ -150,7 +150,7 @@ Each maps to a distinct, friendly popover state (never a crash or blank bar):
 
 ## Polling
 
-- Default interval: **60s**. Manual **Refresh** available. On 429, back off to
+- Default interval: **30s**. Manual **Refresh** available. On 429, back off to
   the next scheduled tick rather than hammering. The menu bar always reflects the
   most recent successful fetch.
 
