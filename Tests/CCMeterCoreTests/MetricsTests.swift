@@ -95,20 +95,23 @@ final class MetricsTests: XCTestCase {
     }
 
     func testElapsedClampHighWhenResetIsInThePast() {
-        // resetsAt more than a window in the past -> timeUntilReset very negative -> elapsed
-        // pre-clamp = 2.0, clamped to 1. used 0.5 <= elapsed(1.0) * greenFactor(1.0) -> green.
-        let c = burnRateColor(percent: 50, resetsAt: resets(afterFractionElapsed: 2.0, window: week),
-                              windowLength: week, now: now)
-        XCTAssertEqual(c, .green)
+        // resetsAt one full window in the past -> raw elapsed 2.0, clamped to 1.0.
+        // With greenFactor 0.5 / amberFactor 0.6: clamped(elapsed=1) gives green<=0.5,
+        // amber<=0.6, so used 0.7 -> red. Without the clamp (elapsed=2) it would be
+        // green<=1.0 -> green, so this case only passes when the clamp is applied.
+        let c = burnRateColor(percent: 70, resetsAt: now.addingTimeInterval(-week),
+                              windowLength: week, now: now, greenFactor: 0.5, amberFactor: 0.6)
+        XCTAssertEqual(c, .red)
     }
 
     func testElapsedClampLowWhenResetIsBeyondAFullWindow() {
-        // resetsAt more than a full window in the future -> timeUntilReset > windowLength ->
-        // elapsed pre-clamp = -1.0, clamped to 0.001. amberThresh = 0.0015; used 0.2 far exceeds
-        // it -> red.
-        let c = burnRateColor(percent: 20, resetsAt: resets(afterFractionElapsed: -1.0, window: week),
-                              windowLength: week, now: now)
-        XCTAssertEqual(c, .red)
+        // resetsAt two full windows in the future -> raw elapsed -1.0, clamped to 0.001.
+        // With amberFactor 1000: clamped(elapsed=0.001) gives amber<=1.0, so used 0.5 ->
+        // amber. Without the clamp (elapsed=-1) amber<=-1000 -> red, so this case only
+        // passes when the clamp is applied.
+        let c = burnRateColor(percent: 50, resetsAt: now.addingTimeInterval(2 * week),
+                              windowLength: week, now: now, amberFactor: 1000)
+        XCTAssertEqual(c, .amber)
     }
 
     func testCountdownAtExactlyZeroSeconds() {
