@@ -1,5 +1,4 @@
 import Foundation
-import Security
 
 private struct CredentialsBlob: Decodable {
     let claudeAiOauth: OAuth?
@@ -20,6 +19,14 @@ public protocol TokenProviding {
 }
 
 /// Reads a generic-password Keychain item as raw Data.
+///
+/// This shells out to the Apple-signed `/usr/bin/security` tool rather than
+/// calling `SecItemCopyMatching` directly. The credential item is owned by
+/// Claude Code, so any other reader triggers a Keychain access prompt. Because
+/// our own binary is only ad-hoc signed (no stable code identity), "Always
+/// Allow" cannot durably whitelist it and macOS re-prompts on every read. The
+/// `security` tool has a stable Apple identity, so a single "Always Allow"
+/// persists across our rebuilds and every poll.
 public struct KeychainReader {
     let service: String
     let account: String
@@ -30,19 +37,31 @@ public struct KeychainReader {
     }
 
     public func readBlob() throws -> Data {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
-        ]
-        var item: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &item)
-        guard status == errSecSuccess, let data = item as? Data else {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+        process.arguments = ["find-generic-password", "-w", "-s", service, "-a", account]
+        let stdout = Pipe()
+        process.standardOutput = stdout
+        process.standardError = Pipe()   // suppress "item not found" noise
+
+        do {
+            try process.run()
+        } catch {
             throw UsageError.noCredentials
         }
-        return data
+
+        let data = stdout.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+
+        // security prints the password (the JSON blob) with a trailing newline.
+        guard process.terminationStatus == 0,
+              let text = String(data: data, encoding: .utf8)?
+                  .trimmingCharacters(in: .whitespacesAndNewlines),
+              !text.isEmpty,
+              let blob = text.data(using: .utf8) else {
+            throw UsageError.noCredentials
+        }
+        return blob
     }
 }
 
