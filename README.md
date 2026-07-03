@@ -22,7 +22,7 @@ The app runs as a menu bar accessory (no dock icon). Click the menu bar item for
 the full breakdown. Use the Used/Left button to switch between used and remaining
 views, Refresh to fetch immediately, and Quit to exit.
 
-Usage refreshes every 30 seconds.
+Usage refreshes every minute.
 
 ## How it works
 

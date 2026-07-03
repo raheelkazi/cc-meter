@@ -30,7 +30,7 @@ public final class MeterViewModel: ObservableObject {
     private var timer: Timer?
 
     public init(client: UsageFetching,
-                interval: TimeInterval = 30,
+                interval: TimeInterval = 60,
                 now: @escaping () -> Date = { Date() }) {
         self.client = client
         self.interval = interval

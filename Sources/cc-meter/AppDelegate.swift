@@ -11,7 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let client = UsageClient(tokenProvider: provider,
                                  transport: URLSessionTransport(session: .shared),
                                  now: { Date() })
-        let viewModel = MeterViewModel(client: client, interval: 30)
+        let viewModel = MeterViewModel(client: client, interval: 60)
 
         let controller = MenuBarController(viewModel: viewModel)
         controller.install()
