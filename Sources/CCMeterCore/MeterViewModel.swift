@@ -21,7 +21,7 @@ public struct MeterRow: Identifiable {
 @MainActor
 public final class MeterViewModel: ObservableObject {
     @Published public private(set) var state: MeterState = .loading
-    @Published public var displayMode: DisplayMode = .remaining
+    @Published public var displayMode: DisplayMode = .used
     @Published public private(set) var lastUpdated: Date?
 
     private let client: UsageFetching
