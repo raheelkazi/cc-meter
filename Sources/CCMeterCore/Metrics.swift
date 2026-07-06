@@ -1,26 +1,15 @@
 import Foundation
 
-/// Colors a window by comparing how much has been used to how far through the
-/// window we are. Uses less than sustainable pace -> green, elevated -> amber,
-/// burning too fast -> red. Remaining under 10% forces red.
-public func burnRateColor(percent: Double,
-                          resetsAt: Date,
-                          windowLength: TimeInterval,
-                          now: Date,
-                          greenFactor: Double = 1.0,
-                          amberFactor: Double = 1.5) -> MeterColor {
-    let remaining = 100 - percent
-    if remaining < 10 { return .red }
-
-    let used = percent / 100
-    if used < 0.05 { return .green }   // guard against false-red right after a reset
-
-    let timeUntilReset = resetsAt.timeIntervalSince(now)
-    let elapsed = min(max((windowLength - timeUntilReset) / windowLength, 0.001), 1)
-
-    if used <= elapsed * greenFactor { return .green }
-    if used <= elapsed * amberFactor { return .amber }
-    return .red
+/// Colors a window by how much of the limit has been used, like a fuel gauge:
+/// plenty left -> green, getting close -> amber, nearly exhausted -> red. Usage
+/// only ever gets "hotter" as it climbs, so an empty window reads green and a
+/// full one reads red.
+public func usageColor(percent: Double,
+                       amberThreshold: Double = 50,
+                       redThreshold: Double = 90) -> MeterColor {
+    if percent >= redThreshold { return .red }
+    if percent >= amberThreshold { return .amber }
+    return .green
 }
 
 /// Human countdown to the reset time, e.g. "resets in 2d 3h", "resets in 42m".

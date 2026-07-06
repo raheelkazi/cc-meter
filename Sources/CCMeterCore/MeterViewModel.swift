@@ -89,11 +89,10 @@ public final class MeterViewModel: ObservableObject {
         return "updated \(mins / 60)h ago"
     }
 
-    /// Rounds a limit's used percent and colors it by burn rate. Shared by the
+    /// Rounds a limit's used percent and colors it by usage level. Shared by the
     /// menu-bar badge (compact) and the popover rows so the mapping lives once.
-    private func summarize(_ limit: UsageLimit, at clock: Date) -> (percent: Int, color: MeterColor) {
-        let color = burnRateColor(percent: limit.percent, resetsAt: limit.resetsAt,
-                                  windowLength: limit.kind.length, now: clock)
+    private func summarize(_ limit: UsageLimit) -> (percent: Int, color: MeterColor) {
+        let color = usageColor(percent: limit.percent)
         return (Int(limit.percent.rounded()), color)
     }
 
@@ -102,7 +101,7 @@ public final class MeterViewModel: ObservableObject {
         let active = usage.limits.filter { $0.isActive }
         let pool = active.isEmpty ? usage.limits : active
         guard let top = pool.max(by: { $0.percent < $1.percent }) else { return nil }
-        return summarize(top, at: now())
+        return summarize(top)
     }
 
     public var rows: [MeterRow] {
@@ -110,7 +109,7 @@ public final class MeterViewModel: ObservableObject {
         let mode = displayMode
         let clock = now()
         return usage.limits.enumerated().map { index, limit in
-            let used = summarize(limit, at: clock)
+            let used = summarize(limit)
             let displayPercent = mode == .used ? used.percent : (100 - used.percent)
             // Index-prefixed id stays unique even if two windows share a label.
             return MeterRow(id: "\(index)-\(limit.kind.label)",
