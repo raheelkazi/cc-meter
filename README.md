@@ -2,8 +2,8 @@
 
 A native macOS menu bar app that shows your Claude Code usage limits in real
 time: the 5-hour session window, the 7-day window, and any per-model weekly
-limits. Each is color-coded by burn rate (green sustainable, amber elevated, red
-burning fast, and red when under 10% remaining) with a reset countdown.
+limits. Each is color-coded by how much of the limit is used, like a fuel gauge
+(green when plenty is left, amber past 50%, red past 90%), with a reset countdown.
 
 It reads the OAuth token that the `claude` CLI stores in your macOS Keychain and
 calls Anthropic's usage endpoint. No token is ever displayed or stored elsewhere.
@@ -37,7 +37,7 @@ Usage refreshes every minute.
     swift build    # build
     swift run cc-meter
 
-The core logic (Keychain parse, HTTP client, decoding, burn-rate color, view
+The core logic (Keychain parse, HTTP client, decoding, usage color, view
 model) lives in the `CCMeterCore` library and is unit-tested with injected
 fakes. The `cc-meter` executable is thin AppKit/SwiftUI glue.
 

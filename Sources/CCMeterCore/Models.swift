@@ -5,14 +5,6 @@ public enum WindowKind: Equatable {
     case weeklyAll
     case weeklyScoped(model: String)
 
-    /// Rolling window length used to compute elapsed fraction.
-    public var length: TimeInterval {
-        switch self {
-        case .session: return 5 * 3600
-        case .weeklyAll, .weeklyScoped: return 7 * 24 * 3600
-        }
-    }
-
     public var label: String {
         switch self {
         case .session: return "5-hour"
