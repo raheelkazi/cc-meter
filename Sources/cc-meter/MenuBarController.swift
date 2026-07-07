@@ -8,10 +8,12 @@ final class MenuBarController {
     private let statusItem: NSStatusItem
     private let popover = NSPopover()
     private let viewModel: MeterViewModel
+    private let onOpenSettings: () -> Void
     private var cancellables = Set<AnyCancellable>()
 
-    init(viewModel: MeterViewModel) {
+    init(viewModel: MeterViewModel, onOpenSettings: @escaping () -> Void = {}) {
         self.viewModel = viewModel
+        self.onOpenSettings = onOpenSettings
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     }
 
@@ -22,7 +24,11 @@ final class MenuBarController {
         }
         popover.behavior = .transient
         popover.contentSize = NSSize(width: 300, height: 260)
-        popover.contentViewController = NSHostingController(rootView: PopoverView(viewModel: viewModel))
+        let root = PopoverView(viewModel: viewModel, onOpenSettings: { [weak self] in
+            self?.popover.performClose(nil)
+            self?.onOpenSettings()
+        })
+        popover.contentViewController = NSHostingController(rootView: root)
 
         // Re-render the status title on any published change.
         viewModel.objectWillChange

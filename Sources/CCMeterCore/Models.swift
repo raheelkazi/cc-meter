@@ -28,12 +28,34 @@ public struct UsageLimit: Equatable, Codable {
     }
 }
 
+/// Extra / metered spend the endpoint reports alongside rate limits. Amounts are
+/// in whole currency units (e.g. dollars).
+public struct Spend: Equatable, Codable {
+    public let amount: Double
+    public let limit: Double?
+    public let currency: String
+
+    public init(amount: Double, limit: Double?, currency: String) {
+        self.amount = amount
+        self.limit = limit
+        self.currency = currency
+    }
+
+    /// Fraction of the spend cap used (0...100), or nil when there is no cap.
+    public var percent: Double? {
+        guard let limit, limit > 0 else { return nil }
+        return min(100, amount / limit * 100)
+    }
+}
+
 public struct Usage: Equatable, Codable {
     public let limits: [UsageLimit]
+    public let spend: Spend?
     public let fetchedAt: Date
 
-    public init(limits: [UsageLimit], fetchedAt: Date) {
+    public init(limits: [UsageLimit], spend: Spend? = nil, fetchedAt: Date) {
         self.limits = limits
+        self.spend = spend
         self.fetchedAt = fetchedAt
     }
 }

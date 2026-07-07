@@ -44,11 +44,16 @@ public struct UsageClient: UsageFetching {
 
     let tokenProvider: TokenProviding
     let transport: Transport
+    let refresher: TokenRefreshing?
     let now: () -> Date
 
-    public init(tokenProvider: TokenProviding, transport: Transport, now: @escaping () -> Date) {
+    public init(tokenProvider: TokenProviding,
+                transport: Transport,
+                refresher: TokenRefreshing? = nil,
+                now: @escaping () -> Date) {
         self.tokenProvider = tokenProvider
         self.transport = transport
+        self.refresher = refresher
         self.now = now
     }
 
@@ -57,6 +62,26 @@ public struct UsageClient: UsageFetching {
         do { token = try tokenProvider.currentToken() }
         catch { return .failure(.noCredentials) }
 
+        let first = await perform(token: token)
+
+        // On an auth failure, try one silent token refresh and retry once. If no
+        // refresher is wired, or refresh yields no token, the original
+        // .unauthorized surfaces so the user is told to re-run `claude`.
+        if case .failure(.unauthorized) = first, let refresher {
+            do {
+                if let refreshed = try await refresher.refresh() {
+                    return await perform(token: refreshed)
+                }
+            } catch {
+                // The refresh request itself failed to reach the server: treat as
+                // transient so last-known data is kept and we retry next tick.
+                return .failure(.network("token refresh failed: \(error.localizedDescription)"))
+            }
+        }
+        return first
+    }
+
+    private func perform(token: String) async -> Result<Usage, UsageError> {
         var request = URLRequest(url: Self.endpoint)
         request.httpMethod = "GET"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
