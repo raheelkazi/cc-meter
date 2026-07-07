@@ -8,6 +8,22 @@ limits. Each is color-coded by how much of the limit is used, like a fuel gauge
 It reads the OAuth token that the `claude` CLI stores in your macOS Keychain and
 calls Anthropic's usage endpoint. No token is ever displayed or stored elsewhere.
 
+## Install with Homebrew
+
+    brew install raheelkazi/tap/cc-meter
+    brew services start cc-meter
+
+That builds cc-meter, installs it, and runs it as a menu bar app that starts at
+login. The first time it reads your usage, macOS asks to allow `security` to
+access your Keychain - click "Always Allow" once and it will not ask again.
+
+Manage it with:
+
+    brew services restart cc-meter   # after an upgrade
+    brew services stop cc-meter      # stop and disable
+
+Upgrade later with `brew upgrade cc-meter`.
+
 ## Requirements
 
 - macOS 13 or later
