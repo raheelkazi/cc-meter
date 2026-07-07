@@ -3,7 +3,18 @@ import Foundation
 public struct HTTPResponse {
     public let status: Int
     public let data: Data
-    public init(status: Int, data: Data) { self.status = status; self.data = data }
+    public let headers: [String: String]
+
+    public init(status: Int, data: Data, headers: [String: String] = [:]) {
+        self.status = status
+        self.data = data
+        self.headers = headers
+    }
+
+    /// Header lookup ignoring case, since proxies re-case header names freely.
+    public func header(_ name: String) -> String? {
+        headers.first { $0.key.caseInsensitiveCompare(name) == .orderedSame }?.value
+    }
 }
 
 public protocol Transport {
@@ -15,8 +26,12 @@ public struct URLSessionTransport: Transport {
     public init(session: URLSession = .shared) { self.session = session }
     public func send(_ request: URLRequest) async throws -> HTTPResponse {
         let (data, response) = try await session.data(for: request)
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        return HTTPResponse(status: status, data: data)
+        let http = response as? HTTPURLResponse
+        var headers: [String: String] = [:]
+        for (key, value) in http?.allHeaderFields ?? [:] {
+            headers["\(key)"] = "\(value)"
+        }
+        return HTTPResponse(status: http?.statusCode ?? 0, data: data, headers: headers)
     }
 }
 
@@ -63,7 +78,11 @@ public struct UsageClient: UsageFetching {
                 return .failure(.badResponse("decode failed: \(error)"))
             }
         case 401, 403: return .failure(.unauthorized)
-        case 429: return .failure(.rateLimited)
+        case 429:
+            // Retry-After can also be an HTTP-date; we only honor the
+            // delta-seconds form and let the caller fall back otherwise.
+            let retryAfter = response.header("Retry-After").flatMap(TimeInterval.init)
+            return .failure(.rateLimited(retryAfter: retryAfter))
         case 500...599: return .failure(.network("HTTP \(response.status)"))
         default: return .failure(.badResponse("HTTP \(response.status)"))
         }

@@ -4,19 +4,21 @@ import XCTest
 private final class FakeTransport: Transport {
     let status: Int
     let data: Data
+    let headers: [String: String]
     var error: Error?
     var capturedRequest: URLRequest?
 
-    init(status: Int, data: Data, error: Error? = nil) {
+    init(status: Int, data: Data, headers: [String: String] = [:], error: Error? = nil) {
         self.status = status
         self.data = data
+        self.headers = headers
         self.error = error
     }
 
     func send(_ request: URLRequest) async throws -> HTTPResponse {
         capturedRequest = request
         if let error { throw error }
-        return HTTPResponse(status: status, data: data)
+        return HTTPResponse(status: status, data: data, headers: headers)
     }
 }
 
@@ -30,9 +32,10 @@ private struct FakeToken: TokenProviding {
 
 final class UsageClientTests: XCTestCase {
     private func client(status: Int, data: Data, token: String? = "sk-test",
-                        error: Error? = nil) -> UsageClient {
+                        headers: [String: String] = [:], error: Error? = nil) -> UsageClient {
         UsageClient(tokenProvider: FakeToken(token: token),
-                    transport: FakeTransport(status: status, data: data, error: error),
+                    transport: FakeTransport(status: status, data: data,
+                                             headers: headers, error: error),
                     now: { Date(timeIntervalSince1970: 1783100000) })
     }
 
@@ -56,7 +59,26 @@ final class UsageClientTests: XCTestCase {
 
     func testRateLimitedMapsToRateLimited() async {
         let result = await client(status: 429, data: Data()).fetch()
-        XCTAssertEqual(result.failureError, .rateLimited)
+        XCTAssertEqual(result.failureError, .rateLimited(retryAfter: nil))
+    }
+
+    func testRateLimitedParsesRetryAfterSeconds() async {
+        let result = await client(status: 429, data: Data(),
+                                  headers: ["Retry-After": "300"]).fetch()
+        XCTAssertEqual(result.failureError, .rateLimited(retryAfter: 300))
+    }
+
+    func testRetryAfterHeaderLookupIsCaseInsensitive() async {
+        let result = await client(status: 429, data: Data(),
+                                  headers: ["retry-after": "120"]).fetch()
+        XCTAssertEqual(result.failureError, .rateLimited(retryAfter: 120))
+    }
+
+    func testNonNumericRetryAfterFallsBackToNil() async {
+        // The HTTP-date form is valid per spec; we don't parse it, we fall back.
+        let result = await client(status: 429, data: Data(),
+                                  headers: ["Retry-After": "Tue, 07 Jul 2026 20:00:00 GMT"]).fetch()
+        XCTAssertEqual(result.failureError, .rateLimited(retryAfter: nil))
     }
 
     func testTransportErrorMapsToNetwork() async {

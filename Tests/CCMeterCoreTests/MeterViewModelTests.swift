@@ -3,8 +3,19 @@ import XCTest
 
 private final class StubClient: UsageFetching {
     var result: Result<Usage, UsageError>
+    private(set) var fetchCount = 0
     init(_ result: Result<Usage, UsageError>) { self.result = result }
-    func fetch() async -> Result<Usage, UsageError> { result }
+    func fetch() async -> Result<Usage, UsageError> {
+        fetchCount += 1
+        return result
+    }
+}
+
+private final class StubStore: UsageStoring {
+    var saved: SavedUsage?
+    init(_ saved: SavedUsage? = nil) { self.saved = saved }
+    func save(_ saved: SavedUsage) { self.saved = saved }
+    func load() -> SavedUsage? { saved }
 }
 
 @MainActor
@@ -72,7 +83,7 @@ final class MeterViewModelTests: XCTestCase {
         let stub = StubClient(.success(sampleUsage()))
         let vm = MeterViewModel(client: stub, interval: 30, now: { self.now })
         await vm.refresh()                       // now .ok
-        stub.result = .failure(.rateLimited)
+        stub.result = .failure(.rateLimited(retryAfter: nil))
         await vm.refresh()                       // transient -> keep .ok
         guard case .ok = vm.state else { return XCTFail("expected still ok") }
         XCTAssertEqual(vm.rows.count, 3)
@@ -159,5 +170,121 @@ final class MeterViewModelTests: XCTestCase {
         await vm.refresh()
         XCTAssertEqual(vm.lastUpdated, now)
         XCTAssertNotNil(vm.lastUpdatedText)
+    }
+
+    // MARK: Rate-limit back-off
+
+    func testRateLimitedWhileLoadingStaysLoading() async {
+        // The very first fetch hitting a 429 is not an error condition; the
+        // badge should keep showing "loading", not flip to "!".
+        let vm = MeterViewModel(client: StubClient(.failure(.rateLimited(retryAfter: 300))),
+                                interval: 30, now: { self.now })
+        await vm.refresh()
+        guard case .loading = vm.state else {
+            return XCTFail("429 from .loading must stay .loading, got \(vm.state)")
+        }
+    }
+
+    func testRetryAfterSuppressesTimerPollsUntilElapsed() async {
+        var clock = now
+        let stub = StubClient(.failure(.rateLimited(retryAfter: 300)))
+        let vm = MeterViewModel(client: stub, interval: 30, now: { clock })
+        await vm.refresh()                       // 429 -> back off 300s
+        XCTAssertEqual(stub.fetchCount, 1)
+
+        clock = now.addingTimeInterval(60)       // inside the back-off window
+        await vm.refreshIfNotBackedOff()
+        XCTAssertEqual(stub.fetchCount, 1, "poll inside Retry-After must be skipped")
+
+        clock = now.addingTimeInterval(301)      // window elapsed
+        await vm.refreshIfNotBackedOff()
+        XCTAssertEqual(stub.fetchCount, 2)
+    }
+
+    func testRateLimitedWithoutRetryAfterBacksOffOneInterval() async {
+        var clock = now
+        let stub = StubClient(.failure(.rateLimited(retryAfter: nil)))
+        let vm = MeterViewModel(client: stub, interval: 30, now: { clock })
+        await vm.refresh()
+        clock = now.addingTimeInterval(15)       // inside the interval fallback
+        await vm.refreshIfNotBackedOff()
+        XCTAssertEqual(stub.fetchCount, 1)
+        clock = now.addingTimeInterval(31)
+        await vm.refreshIfNotBackedOff()
+        XCTAssertEqual(stub.fetchCount, 2)
+    }
+
+    func testRetryAfterShorterThanIntervalIsFloored() async {
+        // Never poll faster than the regular cadence just because the server's
+        // back-off happens to be tiny.
+        var clock = now
+        let stub = StubClient(.failure(.rateLimited(retryAfter: 5)))
+        let vm = MeterViewModel(client: stub, interval: 30, now: { clock })
+        await vm.refresh()
+        clock = now.addingTimeInterval(10)       // past retryAfter, inside interval
+        await vm.refreshIfNotBackedOff()
+        XCTAssertEqual(stub.fetchCount, 1)
+    }
+
+    func testManualRefreshBypassesBackoff() async {
+        let stub = StubClient(.failure(.rateLimited(retryAfter: 300)))
+        let vm = MeterViewModel(client: stub, interval: 30, now: { self.now })
+        await vm.refresh()                       // enter back-off
+        await vm.refresh()                       // explicit user refresh
+        XCTAssertEqual(stub.fetchCount, 2)
+    }
+
+    func testSuccessClearsBackoff() async {
+        var clock = now
+        let stub = StubClient(.failure(.rateLimited(retryAfter: 300)))
+        let vm = MeterViewModel(client: stub, interval: 30, now: { clock })
+        await vm.refresh()                       // enter back-off
+        stub.result = .success(sampleUsage())
+        await vm.refresh()                       // manual refresh succeeds
+        clock = now.addingTimeInterval(31)       // one interval later, still < 300s
+        await vm.refreshIfNotBackedOff()
+        XCTAssertEqual(stub.fetchCount, 3, "success must clear the back-off window")
+    }
+
+    // MARK: Persisted last-good usage
+
+    func testLoadCachedUsageSeedsStateAndTimestamp() {
+        let savedAt = now.addingTimeInterval(-120)
+        let store = StubStore(SavedUsage(usage: sampleUsage(), savedAt: savedAt))
+        let vm = MeterViewModel(client: StubClient(.failure(.rateLimited(retryAfter: nil))),
+                                interval: 30, store: store, now: { self.now })
+        vm.loadCachedUsage()
+        guard case .ok = vm.state else { return XCTFail("expected cached .ok") }
+        XCTAssertEqual(vm.lastUpdated, savedAt)   // "updated 2m ago", not "just now"
+    }
+
+    func testStaleCacheIsIgnored() {
+        let store = StubStore(SavedUsage(usage: sampleUsage(),
+                                         savedAt: now.addingTimeInterval(-25 * 3600)))
+        let vm = MeterViewModel(client: StubClient(.failure(.rateLimited(retryAfter: nil))),
+                                interval: 30, store: store, now: { self.now })
+        vm.loadCachedUsage()
+        guard case .loading = vm.state else {
+            return XCTFail("cache older than cacheMaxAge must not seed the display")
+        }
+    }
+
+    func testCacheDoesNotOverwriteFreshFetch() async {
+        let store = StubStore(SavedUsage(usage: sampleUsage(), savedAt: now))
+        let vm = MeterViewModel(client: StubClient(.failure(.unauthorized)),
+                                interval: 30, store: store, now: { self.now })
+        await vm.refresh()                        // real result arrived first
+        vm.loadCachedUsage()
+        guard case .error(.unauthorized) = vm.state else {
+            return XCTFail("cache must only seed the initial .loading state")
+        }
+    }
+
+    func testSuccessfulFetchPersistsToStore() async {
+        let store = StubStore()
+        let vm = MeterViewModel(client: StubClient(.success(sampleUsage())),
+                                interval: 30, store: store, now: { self.now })
+        await vm.refresh()
+        XCTAssertEqual(store.saved, SavedUsage(usage: sampleUsage(), savedAt: now))
     }
 }

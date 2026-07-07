@@ -11,7 +11,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let client = UsageClient(tokenProvider: provider,
                                  transport: URLSessionTransport(session: .shared),
                                  now: { Date() })
-        let viewModel = MeterViewModel(client: client, interval: 60)
+        // 180s polling: the usage endpoint's rate budget is shared with Claude
+        // Code itself and is only a handful of requests per ~5 minutes, so a
+        // 60s cadence kept tripping 429s.
+        let viewModel = MeterViewModel(client: client,
+                                       interval: 180,
+                                       store: DiskUsageStore.standard())
 
         let controller = MenuBarController(viewModel: viewModel)
         controller.install()

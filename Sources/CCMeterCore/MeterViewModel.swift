@@ -27,28 +27,46 @@ public final class MeterViewModel: ObservableObject {
 
     private let client: UsageFetching
     private let interval: TimeInterval
+    private let store: UsageStoring?
+    private let cacheMaxAge: TimeInterval
     private let now: () -> Date
     private var timer: Timer?
+    /// Server-directed quiet period after a 429. Timer polls inside it are
+    /// skipped: retrying early burns the shared rate budget and extends the
+    /// throttle. Manual Refresh still goes through.
+    private var backoffUntil: Date?
 
     public init(client: UsageFetching,
                 interval: TimeInterval = 60,
+                store: UsageStoring? = nil,
+                cacheMaxAge: TimeInterval = 24 * 3600,
                 now: @escaping () -> Date = { Date() }) {
         self.client = client
         self.interval = interval
+        self.store = store
+        self.cacheMaxAge = cacheMaxAge
         self.now = now
     }
 
     /// Kicks off an immediate fetch and schedules periodic refreshes.
+    /// Seeds the display from the last persisted fetch first, so a rate-limited
+    /// first fetch shows dated-but-real numbers instead of an error.
     public func start() {
+        loadCachedUsage()
         refreshNow()
         timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             // The Timer callback is nonisolated; hop to the main actor and refresh.
-            Task { @MainActor in await self?.refresh() }
+            Task { @MainActor in await self?.refreshIfNotBackedOff() }
         }
     }
 
     public func refreshNow() {
         Task { @MainActor in await self.refresh() }
+    }
+
+    func refreshIfNotBackedOff() async {
+        if let backoffUntil, now() < backoffUntil { return }
+        await refresh()
     }
 
     public func refresh() async {
@@ -57,13 +75,33 @@ public final class MeterViewModel: ObservableObject {
         case .success(let usage):
             state = .ok(usage)
             lastUpdated = now()
+            backoffUntil = nil
+            store?.save(SavedUsage(usage: usage, savedAt: now()))
         case .failure(let error):
-            if case .ok = state, isTransient(error) {
-                // Keep last-known data on transient errors; do not disrupt display.
+            if case .rateLimited(let retryAfter) = error {
+                // Honor the server's back-off, but never poll faster than the
+                // regular interval either way.
+                backoffUntil = now().addingTimeInterval(max(retryAfter ?? interval, interval))
             } else {
+                backoffUntil = nil
+            }
+            switch (state, error) {
+            case (.ok, _) where isTransient(error):
+                break   // Keep last-known data on transient errors.
+            case (.loading, .rateLimited):
+                break   // Still waiting for a first result; not an error condition.
+            default:
                 state = .error(error)
             }
         }
+    }
+
+    func loadCachedUsage() {
+        guard case .loading = state,
+              let saved = store?.load(),
+              now().timeIntervalSince(saved.savedAt) < cacheMaxAge else { return }
+        state = .ok(saved.usage)
+        lastUpdated = saved.savedAt
     }
 
     public func toggleMode() {

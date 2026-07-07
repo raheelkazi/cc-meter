@@ -1,6 +1,6 @@
 import Foundation
 
-public enum WindowKind: Equatable {
+public enum WindowKind: Equatable, Codable {
     case session
     case weeklyAll
     case weeklyScoped(model: String)
@@ -14,7 +14,7 @@ public enum WindowKind: Equatable {
     }
 }
 
-public struct UsageLimit: Equatable {
+public struct UsageLimit: Equatable, Codable {
     public let kind: WindowKind
     public let percent: Double   // 0...100
     public let resetsAt: Date
@@ -28,7 +28,7 @@ public struct UsageLimit: Equatable {
     }
 }
 
-public struct Usage: Equatable {
+public struct Usage: Equatable, Codable {
     public let limits: [UsageLimit]
     public let fetchedAt: Date
 
@@ -41,7 +41,9 @@ public struct Usage: Equatable {
 public enum UsageError: Error, Equatable {
     case noCredentials
     case unauthorized
-    case rateLimited
+    // Server-reported back-off (Retry-After header), in seconds, when present.
+    // Polling before it elapses just burns more of the shared rate budget.
+    case rateLimited(retryAfter: TimeInterval?)
     // Transient connectivity blip. Safe to keep showing last-known data and retry.
     case network(String)
     // Deterministic response problem (undecodable body, forbidden, unexpected
