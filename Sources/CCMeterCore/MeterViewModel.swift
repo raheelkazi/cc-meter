@@ -57,6 +57,12 @@ public final class MeterViewModel: ObservableObject {
     /// or two of noise, short enough to react to a fresh spike.
     private let burnWindow: TimeInterval = 2 * 3600
     private let sparklinePoints = 24
+    /// Two samples belong to the same limit window when their reset times are
+    /// within this tolerance. The endpoint's `resets_at` jitters by up to ~1s
+    /// between fetches, so exact equality wrongly split every poll into its own
+    /// "window" (killing sparklines/burn). A real reset moves `resets_at` by the
+    /// whole window (>=5h), so a generous minutes-scale tolerance is unambiguous.
+    private let windowMatchTolerance: TimeInterval = 600
 
     public init(client: UsageFetching,
                 interval: TimeInterval = 60,
@@ -150,14 +156,21 @@ public final class MeterViewModel: ObservableObject {
     }
 
     /// Applies updated preferences at runtime: re-reads polling cadence (restarting
-    /// the timer if it changed) and display default. Threshold/history changes take
-    /// effect on the next fetch.
+    /// the timer if it changed) and the display default. Threshold/history changes
+    /// take effect on the next fetch.
     public func apply(_ preferences: Preferences) {
         let normalized = preferences.normalized()
         let intervalChanged = normalized.pollInterval != self.interval
+        // Flip the live display only when the default actually changes, so an
+        // unrelated settings edit doesn't stomp a manual Used/Left toggle.
+        let showRemainingChanged =
+            normalized.defaultShowRemaining != self.preferences.defaultShowRemaining
         self.preferences = normalized
         self.interval = normalized.pollInterval
         if intervalChanged, timer != nil { scheduleTimer() }
+        if showRemainingChanged {
+            displayMode = normalized.defaultShowRemaining ? .remaining : .used
+        }
     }
 
     public func toggleMode() {
@@ -223,9 +236,14 @@ public final class MeterViewModel: ObservableObject {
 
             // Only consider samples from the current window: after a reset the old
             // window's percentages must not pollute the burn rate or the trend.
-            // (Legacy samples without a recorded window are treated as matching.)
+            // Match by tolerance rather than exact equality because `resets_at`
+            // jitters sub-second between fetches. (Legacy samples without a
+            // recorded window are treated as matching.)
             let windowSamples = (history?.recent(kindLabel: label, since: .distantPast) ?? [])
-                .filter { $0.windowResetsAt == nil || $0.windowResetsAt == limit.resetsAt }
+                .filter { sample in
+                    guard let windowResetsAt = sample.windowResetsAt else { return true }
+                    return abs(windowResetsAt.timeIntervalSince(limit.resetsAt)) < windowMatchTolerance
+                }
             let burnSamples = windowSamples.filter { $0.at >= clock.addingTimeInterval(-burnWindow) }
             let projection = burnProjection(samples: burnSamples,
                                             currentPercent: limit.percent,
