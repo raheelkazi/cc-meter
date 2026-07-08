@@ -60,7 +60,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 360, height: 480)
+        .frame(minWidth: 380, minHeight: 420)
         .onChange(of: prefs) { newValue in onChange(newValue) }
     }
 

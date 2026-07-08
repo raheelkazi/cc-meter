@@ -49,4 +49,20 @@ final class DecodingTests: XCTestCase {
         let spend = Spend(amount: 5, limit: nil, currency: "USD")
         XCTAssertNil(spend.percent)
     }
+
+    func testMalformedSpendDoesNotFailWholeResponse() throws {
+        // Real endpoint returned spend.used as an object, not a number. A spend
+        // shape mismatch must NOT blank the meter: limits still decode, spend nil.
+        let json = """
+        {
+          "limits": [
+            { "kind": "session", "percent": 20, "resets_at": "2026-07-03T21:09:59+00:00", "is_active": true }
+          ],
+          "spend": { "used": { "amount_cents": 1234, "currency": "USD" }, "limit": { "amount_cents": 5000 } }
+        }
+        """.data(using: .utf8)!
+        let usage = try JSONDecoder().decode(UsageResponse.self, from: json).toUsage(now: Date())
+        XCTAssertEqual(usage.limits.count, 1)
+        XCTAssertNil(usage.spend)
+    }
 }

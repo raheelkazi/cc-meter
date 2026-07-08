@@ -12,6 +12,18 @@ public struct UsageResponse: Decodable {
         case extraUsage = "extra_usage"
     }
 
+    /// `limits` is decoded strictly (a shape change there is a real problem worth
+    /// surfacing), but `spend`/`extra_usage` are best-effort with an unverified
+    /// live shape, so any mismatch there is swallowed to nil. Letting a spend
+    /// decode error propagate would fail the whole response and blank the meter -
+    /// which is exactly the regression this guards against.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        limits = try container.decodeIfPresent([Limit].self, forKey: .limits)
+        spend = (try? container.decodeIfPresent(SpendWire.self, forKey: .spend)) ?? nil
+        extraUsage = (try? container.decodeIfPresent(SpendWire.self, forKey: .extraUsage)) ?? nil
+    }
+
     /// Provisional spend shape. The live field layout is not verified (the design
     /// doc lists `spend`/`extra_usage` as reported-but-unused), so this decodes
     /// several plausible keys and yields nil rather than failing the whole

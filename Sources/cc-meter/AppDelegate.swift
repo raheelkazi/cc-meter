@@ -9,9 +9,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var viewModel: MeterViewModel?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        DebugLog.log("didFinishLaunching enter")
         // Bail out if another cc-meter is already running (e.g. launch-at-login
         // plus a manual start) so we don't double up menu bar items or pollers.
-        guard SingleInstance.acquire() else {
+        let acquired = SingleInstance.acquire()
+        DebugLog.log("SingleInstance.acquire -> \(acquired)")
+        guard acquired else {
             NSApplication.shared.terminate(nil)
             return
         }
@@ -59,6 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.controller = controller
 
         viewModel.start()
+        DebugLog.log("didFinishLaunching complete; entering run loop")
     }
 
     private func applyPreferences(_ preferences: Preferences) {

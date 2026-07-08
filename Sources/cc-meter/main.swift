@@ -9,5 +9,7 @@ MainActor.assumeIsolated {
     app.setActivationPolicy(.accessory)   // menu bar only, no dock icon
     let delegate = AppDelegate()
     app.delegate = delegate
+    DebugLog.log("app.run() start")
     app.run()
+    DebugLog.log("app.run() returned (run loop exited)")
 }
