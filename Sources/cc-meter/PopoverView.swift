@@ -18,6 +18,14 @@ struct PopoverView: View {
                 .help("Toggle used vs remaining")
             }
 
+            if let stale = viewModel.staleSnapshot {
+                staleSnapshotView(stale)
+            }
+
+            if let hero = viewModel.hero {
+                heroView(hero)
+            }
+
             content
 
             if let spend = viewModel.spend {
@@ -39,7 +47,7 @@ struct PopoverView: View {
             .font(.caption)
         }
         .padding(14)
-        .frame(width: 300)
+        .frame(width: 340)
     }
 
     @ViewBuilder private var content: some View {
@@ -89,7 +97,79 @@ struct PopoverView: View {
                         .frame(width: 44, height: 12)
                 }
             }
+            if let paceText = row.paceText {
+                Text(paceText)
+                    .font(.caption2)
+                    .foregroundStyle(row.burnUrgent ? Color(nsColor: .systemRed) : .secondary)
+            }
         }
+    }
+
+    @ViewBuilder private func heroView(_ hero: MeterHero) -> some View {
+        HStack(spacing: 12) {
+            ZStack {
+                MeterRing(fraction: hero.fraction,
+                          color: hero.color.swiftUIColor,
+                          trackColor: Color.gray.opacity(0.18))
+                Text("\(hero.percent)%")
+                    .font(.title3.weight(.semibold))
+                    .monospacedDigit()
+            }
+            .frame(width: 72, height: 72)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(hero.status)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(2)
+                Text(heroDetail(hero))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(hero.color.swiftUIColor.opacity(0.10))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(hero.color.swiftUIColor.opacity(0.25), lineWidth: 1)
+        )
+    }
+
+    private func heroDetail(_ hero: MeterHero) -> String {
+        if let burn = hero.burn {
+            return "At current pace, \(burn). \(hero.countdown)."
+        }
+        return hero.countdown
+    }
+
+    @ViewBuilder private func staleSnapshotView(_ stale: StaleSnapshot) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.circle.fill")
+                .foregroundStyle(Color(nsColor: .systemOrange))
+                .font(.system(size: 14, weight: .semibold))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(stale.title)
+                    .font(.caption.weight(.semibold))
+                Text(stale.detail)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(9)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color(nsColor: .systemOrange).opacity(0.10))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color(nsColor: .systemOrange).opacity(0.24), lineWidth: 1)
+        )
     }
 
     @ViewBuilder private func spendView(_ spend: Spend) -> some View {
@@ -165,6 +245,23 @@ private struct Sparkline: View {
                 }
             }
             .stroke(color, style: StrokeStyle(lineWidth: 1.2, lineJoin: .round))
+        }
+    }
+}
+
+private struct MeterRing: View {
+    let fraction: Double
+    let color: Color
+    let trackColor: Color
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(trackColor, lineWidth: 9)
+            Circle()
+                .trim(from: 0, to: min(1, max(0, fraction)))
+                .stroke(color, style: StrokeStyle(lineWidth: 9, lineCap: .round))
+                .rotationEffect(.degrees(-90))
         }
     }
 }

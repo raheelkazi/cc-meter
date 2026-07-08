@@ -55,6 +55,16 @@ final class MeterViewModelTests: XCTestCase {
         XCTAssertEqual(vm.compact?.percent, 54)   // active Fable window
     }
 
+    func testHeroUsesMostConstrainedActiveLimit() async {
+        let vm = MeterViewModel(client: StubClient(.success(sampleUsage())),
+                                interval: 30, now: { self.now })
+        vm.displayMode = .remaining
+        await vm.refresh()
+        XCTAssertEqual(vm.hero?.label, "7-day (Fable)")
+        XCTAssertEqual(vm.hero?.percent, 54)       // always used percent, not remaining-mode display
+        XCTAssertEqual(vm.hero?.status, "7-day (Fable) is warm")
+    }
+
     func testRemainingModeInvertsPercent() async {
         let vm = MeterViewModel(client: StubClient(.success(sampleUsage())),
                                 interval: 30, now: { self.now })
@@ -93,6 +103,20 @@ final class MeterViewModelTests: XCTestCase {
         guard case .ok = vm.state else { return XCTFail("expected still ok") }
         XCTAssertEqual(vm.rows.count, 3)
         XCTAssertEqual(vm.compact?.percent, 54)
+        XCTAssertEqual(vm.staleSnapshot?.title, "Using last good snapshot")
+        XCTAssertTrue(vm.staleSnapshot?.detail.contains("Rate limited") ?? false)
+    }
+
+    func testStaleSnapshotClearsAfterSuccess() async {
+        let stub = StubClient(.success(sampleUsage()))
+        let vm = MeterViewModel(client: stub, interval: 30, now: { self.now })
+        await vm.refresh()
+        stub.result = .failure(.network("offline"))
+        await vm.refresh()
+        XCTAssertNotNil(vm.staleSnapshot)
+        stub.result = .success(sampleUsage())
+        await vm.refresh()
+        XCTAssertNil(vm.staleSnapshot)
     }
 
     func testCompactFallsBackToMaxWhenNoneActive() async {
@@ -328,6 +352,7 @@ final class MeterViewModelTests: XCTestCase {
                                 history: history, now: { self.now })
         await vm.refresh()
         XCTAssertNotNil(vm.rows.first?.burn)
+        XCTAssertEqual(vm.rows.first?.paceText, "+20%/h now vs +4.0%/h safe")
         XCTAssertGreaterThan(vm.rows.first?.series.count ?? 0, 1)
     }
 

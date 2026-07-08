@@ -9,6 +9,22 @@ public enum MeterState {
 
 public enum DisplayMode { case used, remaining }
 
+public struct MeterHero: Equatable {
+    public let label: String
+    public let percent: Int
+    public let fraction: Double
+    public let color: MeterColor
+    public let status: String
+    public let countdown: String
+    public let burn: String?
+    public let burnUrgent: Bool
+}
+
+public struct StaleSnapshot: Equatable {
+    public let title: String
+    public let detail: String
+}
+
 public struct MeterRow: Identifiable {
     public let id: String
     public let label: String
@@ -21,6 +37,8 @@ public struct MeterRow: Identifiable {
     public let burn: String?
     /// True when the projection exhausts the window before it resets (worth emphasis).
     public let burnUrgent: Bool
+    /// Recent burn pace compared with the max sustainable pace until reset.
+    public let paceText: String?
     /// Recent used-percent samples for a trend sparkline (empty when no history).
     public let series: [Double]
 }
@@ -31,6 +49,8 @@ public final class MeterViewModel: ObservableObject {
     @Published public var displayMode: DisplayMode = .used
     /// Time of the last successful fetch, backing the "updated ..." staleness cue.
     @Published public private(set) var lastUpdated: Date?
+    /// Transient failure state shown while the UI keeps rendering last-known data.
+    @Published public private(set) var staleSnapshot: StaleSnapshot?
 
     private let client: UsageFetching
     private var interval: TimeInterval
@@ -125,6 +145,7 @@ public final class MeterViewModel: ObservableObject {
             state = .ok(usage)
             lastUpdated = now()
             backoffUntil = nil
+            staleSnapshot = nil
             store?.save(SavedUsage(usage: usage, savedAt: now()))
             if preferences.historyEnabled { history?.record(usage) }
             dispatchNotifications(for: usage)
@@ -138,10 +159,12 @@ public final class MeterViewModel: ObservableObject {
             }
             switch (state, error) {
             case (.ok, _) where isTransient(error):
+                staleSnapshot = makeStaleSnapshot(for: error)
                 break   // Keep last-known data on transient errors.
             case (.loading, .rateLimited):
                 break   // Still waiting for a first result; not an error condition.
             default:
+                staleSnapshot = nil
                 state = .error(error)
             }
         }
@@ -191,6 +214,19 @@ public final class MeterViewModel: ObservableObject {
         }
     }
 
+    private func makeStaleSnapshot(for error: UsageError) -> StaleSnapshot {
+        let age = lastUpdatedText.map { "Last successful fetch \($0)." } ?? "Showing the last successful fetch."
+        switch error {
+        case .rateLimited:
+            let retry = backoffUntil.map { " Next automatic retry in \(Self.durationText(to: $0, now: now()))." } ?? ""
+            return StaleSnapshot(title: "Using last good snapshot", detail: "Rate limited. \(age)\(retry)")
+        case .network(let message):
+            return StaleSnapshot(title: "Using last good snapshot", detail: "Network error. \(age) \(message)")
+        case .noCredentials, .unauthorized, .badResponse:
+            return StaleSnapshot(title: "Using last good snapshot", detail: age)
+        }
+    }
+
     /// Human "updated ..." cue for the last successful fetch, so kept-stale data
     /// (shown after a transient failure) is visibly dated rather than silently old.
     public var lastUpdatedText: String? {
@@ -211,11 +247,45 @@ public final class MeterViewModel: ObservableObject {
     }
 
     public var compact: (percent: Int, color: MeterColor)? {
+        guard let top = mostConstrainedLimit() else { return nil }
+        return summarize(top)
+    }
+
+    public var hero: MeterHero? {
+        guard let top = mostConstrainedLimit() else { return nil }
+        let clock = now()
+        let used = summarize(top)
+        let samples = currentWindowSamples(for: top, label: top.kind.label)
+        let projection = burnProjection(samples: samples.filter { $0.at >= clock.addingTimeInterval(-burnWindow) },
+                                        currentPercent: top.percent,
+                                        resetsAt: top.resetsAt,
+                                        now: clock)
+        return MeterHero(label: top.kind.label,
+                         percent: used.percent,
+                         fraction: min(1, max(0, top.percent / 100.0)),
+                         color: used.color,
+                         status: heroStatus(label: top.kind.label,
+                                            color: used.color,
+                                            burnUrgent: projection?.willExhaustBeforeReset ?? false),
+                         countdown: countdownText(to: top.resetsAt, now: clock),
+                         burn: projection.map(burnText),
+                         burnUrgent: projection?.willExhaustBeforeReset ?? false)
+    }
+
+    private func mostConstrainedLimit() -> UsageLimit? {
         guard case .ok(let usage) = state else { return nil }
         let active = usage.limits.filter { $0.isActive }
         let pool = active.isEmpty ? usage.limits : active
-        guard let top = pool.max(by: { $0.percent < $1.percent }) else { return nil }
-        return summarize(top)
+        return pool.max(by: { $0.percent < $1.percent })
+    }
+
+    private func heroStatus(label: String, color: MeterColor, burnUrgent: Bool) -> String {
+        if burnUrgent { return "\(label) may run out early" }
+        switch color {
+        case .green: return "\(label) has room"
+        case .amber: return "\(label) is warm"
+        case .red: return "\(label) is nearly full"
+        }
     }
 
     /// Spend/extra-credit info from the last successful fetch, if the endpoint
@@ -233,17 +303,7 @@ public final class MeterViewModel: ObservableObject {
             let used = summarize(limit)
             let displayPercent = mode == .used ? used.percent : (100 - used.percent)
             let label = limit.kind.label
-
-            // Only consider samples from the current window: after a reset the old
-            // window's percentages must not pollute the burn rate or the trend.
-            // Match by tolerance rather than exact equality because `resets_at`
-            // jitters sub-second between fetches. (Legacy samples without a
-            // recorded window are treated as matching.)
-            let windowSamples = (history?.recent(kindLabel: label, since: .distantPast) ?? [])
-                .filter { sample in
-                    guard let windowResetsAt = sample.windowResetsAt else { return true }
-                    return abs(windowResetsAt.timeIntervalSince(limit.resetsAt)) < windowMatchTolerance
-                }
+            let windowSamples = currentWindowSamples(for: limit, label: label)
             let burnSamples = windowSamples.filter { $0.at >= clock.addingTimeInterval(-burnWindow) }
             let projection = burnProjection(samples: burnSamples,
                                             currentPercent: limit.percent,
@@ -260,7 +320,51 @@ public final class MeterViewModel: ObservableObject {
                             countdown: countdownText(to: limit.resetsAt, now: clock),
                             burn: projection.map(burnText),
                             burnUrgent: projection?.willExhaustBeforeReset ?? false,
+                            paceText: projection.flatMap {
+                                paceComparisonText(projection: $0,
+                                                   currentPercent: limit.percent,
+                                                   resetsAt: limit.resetsAt,
+                                                   now: clock)
+                            },
                             series: series)
         }
+    }
+
+    private func currentWindowSamples(for limit: UsageLimit, label: String) -> [HistorySample] {
+        // Only consider samples from the current window: after a reset the old
+        // window's percentages must not pollute the burn rate or the trend.
+        // Match by tolerance rather than exact equality because `resets_at`
+        // jitters sub-second between fetches. (Legacy samples without a
+        // recorded window are treated as matching.)
+        (history?.recent(kindLabel: label, since: .distantPast) ?? [])
+            .filter { sample in
+                guard let windowResetsAt = sample.windowResetsAt else { return true }
+                return abs(windowResetsAt.timeIntervalSince(limit.resetsAt)) < windowMatchTolerance
+            }
+    }
+
+    private func paceComparisonText(projection: BurnProjection,
+                                    currentPercent: Double,
+                                    resetsAt: Date,
+                                    now: Date) -> String? {
+        let hoursUntilReset = resetsAt.timeIntervalSince(now) / 3600.0
+        guard hoursUntilReset > 0 else { return nil }
+        let safeRate = max(0, (100 - currentPercent) / hoursUntilReset)
+        return "\(Self.rateText(projection.ratePerHour)) now vs \(Self.rateText(safeRate)) safe"
+    }
+
+    private static func rateText(_ rate: Double) -> String {
+        if rate >= 10 {
+            return "+\(Int(rate.rounded()))%/h"
+        }
+        return String(format: "+%.1f%%/h", rate)
+    }
+
+    private static func durationText(to date: Date, now: Date) -> String {
+        let secs = max(0, Int(date.timeIntervalSince(now)))
+        let hours = secs / 3600
+        let mins = (secs % 3600) / 60
+        if hours > 0 { return "\(hours)h \(mins)m" }
+        return "\(max(1, mins))m"
     }
 }

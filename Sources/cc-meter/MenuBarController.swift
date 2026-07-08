@@ -23,7 +23,7 @@ final class MenuBarController {
             button.action = #selector(togglePopover)
         }
         popover.behavior = .transient
-        popover.contentSize = NSSize(width: 300, height: 260)
+        popover.contentSize = NSSize(width: 340, height: 420)
         let root = PopoverView(viewModel: viewModel, onOpenSettings: { [weak self] in
             self?.popover.performClose(nil)
             self?.onOpenSettings()
