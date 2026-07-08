@@ -22,8 +22,11 @@ enum SingleInstance {
         let lockPath = dir.appendingPathComponent("instance.lock").path
 
         let fd = open(lockPath, O_CREAT | O_RDWR, 0o644)
+        DebugLog.log("SingleInstance open(\(lockPath)) -> fd=\(fd) errno=\(fd < 0 ? errno : 0)")
         guard fd >= 0 else { return true }
         lockDescriptor = fd
-        return flock(fd, LOCK_EX | LOCK_NB) == 0
+        let result = flock(fd, LOCK_EX | LOCK_NB)
+        DebugLog.log("SingleInstance flock -> \(result) errno=\(result != 0 ? errno : 0)")
+        return result == 0
     }
 }

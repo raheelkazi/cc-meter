@@ -23,12 +23,25 @@ final class SettingsWindowController {
             return
         }
 
+        let contentSize = NSSize(width: 420, height: 560)
         let view = SettingsView(initial: loadPreferences(), onChange: onChange)
         let hosting = NSHostingController(rootView: view)
-        let window = NSWindow(contentViewController: hosting)
+        hosting.preferredContentSize = contentSize
+
+        // Build the window with an explicit content rect and styleMask up front.
+        // Setting styleMask after `NSWindow(contentViewController:)` was resizing
+        // the frame out from under the hosted view, clipping the form.
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: contentSize),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentViewController = hosting
         window.title = "cc-meter Settings"
-        window.styleMask = [.titled, .closable]
         window.isReleasedWhenClosed = false
+        window.setContentSize(contentSize)
+        window.contentMinSize = NSSize(width: 380, height: 420)
         window.center()
         self.window = window
 
