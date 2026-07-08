@@ -25,23 +25,37 @@ final class SettingsWindowController {
 
         let contentSize = NSSize(width: 420, height: 560)
         let view = SettingsView(initial: loadPreferences(), onChange: onChange)
-        let hosting = NSHostingController(rootView: view)
-        hosting.preferredContentSize = contentSize
 
-        // Build the window with an explicit content rect and styleMask up front.
-        // Setting styleMask after `NSWindow(contentViewController:)` was resizing
-        // the frame out from under the hosted view, clipping the form.
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: contentSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
-        window.contentViewController = hosting
         window.title = "cc-meter Settings"
         window.isReleasedWhenClosed = false
-        window.setContentSize(contentSize)
         window.contentMinSize = NSSize(width: 380, height: 420)
+
+        // Pin the SwiftUI view to the content view's bounds via Auto Layout.
+        // Handing SwiftUI to the window through `contentViewController` (or an
+        // autoresizing hosting view) left the grouped Form offset with its
+        // leading edge clipped; explicit edge constraints force it to fill the
+        // content area exactly, with no negative origin or horizontal overflow.
+        let hosting = NSHostingView(rootView: view)
+        // Default sizingOptions add intrinsic-size constraints that fight the
+        // edge pins below and displace the content; let the pins fully own layout.
+        hosting.sizingOptions = []
+        hosting.translatesAutoresizingMaskIntoConstraints = false
+        let container = window.contentView!
+        container.addSubview(hosting)
+        NSLayoutConstraint.activate([
+            hosting.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            hosting.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            hosting.topAnchor.constraint(equalTo: container.topAnchor),
+            hosting.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
+
+        window.setContentSize(contentSize)
         window.center()
         self.window = window
 
