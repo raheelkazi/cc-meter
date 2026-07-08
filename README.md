@@ -49,11 +49,8 @@ Usage refreshes every minute by default (configurable in Settings).
   80% / 95% / 100% (configurable), plus an optional heads-up before the 5-hour
   window resets. Alerts are edge-triggered, so you get one per crossing and they
   re-arm after each window reset.
-- **Burn-rate projection**: each row shows an estimate like `~40m to limit` based
-  on your recent consumption, highlighted when you're on track to run out before
-  the window resets.
-- **Trend sparklines**: a small history-backed sparkline per limit so you can see
-  whether usage is climbing or flat.
+- **Burn-rate projection**: each row shows current burn, safe burn, and whether
+  the limit is projected to exhaust before the reset.
 - **Spend / extra-credits row**: rendered when the usage endpoint reports it.
 - **Automatic token refresh**: on an expired token the app silently refreshes
   using the stored refresh token and retries, falling back to a re-authenticate

@@ -9,6 +9,13 @@ public enum MeterState {
 
 public enum DisplayMode { case used, remaining }
 
+public struct BurnForecast: Equatable {
+    public let rateText: String
+    public let limitText: String
+    public let detailText: String
+    public let isUrgent: Bool
+}
+
 public struct MeterHero: Equatable {
     public let label: String
     public let percent: Int
@@ -18,6 +25,7 @@ public struct MeterHero: Equatable {
     public let countdown: String
     public let burn: String?
     public let burnUrgent: Bool
+    public let forecast: BurnForecast?
 }
 
 public struct StaleSnapshot: Equatable {
@@ -38,10 +46,8 @@ public struct MeterRow: Identifiable {
     public let burn: String?
     /// True when the projection exhausts the window before it resets (worth emphasis).
     public let burnUrgent: Bool
-    /// Recent burn pace compared with the max sustainable pace until reset.
-    public let paceText: String?
-    /// Recent used-percent samples for a trend sparkline (empty when no history).
-    public let series: [Double]
+    /// Current burn rate and projected exhaustion/reset outcome.
+    public let forecast: BurnForecast?
 }
 
 @MainActor
@@ -77,11 +83,10 @@ public final class MeterViewModel: ObservableObject {
     /// Window of history used to estimate burn rate; long enough to smooth a poll
     /// or two of noise, short enough to react to a fresh spike.
     private let burnWindow: TimeInterval = 2 * 3600
-    private let sparklinePoints = 24
     /// Two samples belong to the same limit window when their reset times are
     /// within this tolerance. The endpoint's `resets_at` jitters by up to ~1s
     /// between fetches, so exact equality wrongly split every poll into its own
-    /// "window" (killing sparklines/burn). A real reset moves `resets_at` by the
+    /// "window" (killing burn forecasts). A real reset moves `resets_at` by the
     /// whole window (>=5h), so a generous minutes-scale tolerance is unambiguous.
     private let windowMatchTolerance: TimeInterval = 600
 
@@ -270,7 +275,13 @@ public final class MeterViewModel: ObservableObject {
                                             burnUrgent: projection?.willExhaustBeforeReset ?? false),
                          countdown: countdownText(to: top.resetsAt, now: clock),
                          burn: projection.map(burnText),
-                         burnUrgent: projection?.willExhaustBeforeReset ?? false)
+                         burnUrgent: projection?.willExhaustBeforeReset ?? false,
+                         forecast: projection.flatMap {
+                             burnForecast(projection: $0,
+                                          currentPercent: top.percent,
+                                          resetsAt: top.resetsAt,
+                                          now: clock)
+                         })
     }
 
     private func mostConstrainedLimit() -> UsageLimit? {
@@ -320,7 +331,6 @@ public final class MeterViewModel: ObservableObject {
                                             currentPercent: limit.percent,
                                             resetsAt: limit.resetsAt,
                                             now: clock)
-            let series = downsampleSeries(windowSamples.map(\.percent), maxPoints: sparklinePoints)
 
             // Index-prefixed id stays unique even if two windows share a label.
             return MeterRow(id: "\(index)-\(label)",
@@ -332,13 +342,12 @@ public final class MeterViewModel: ObservableObject {
                             countdown: countdownText(to: limit.resetsAt, now: clock),
                             burn: projection.map(burnText),
                             burnUrgent: projection?.willExhaustBeforeReset ?? false,
-                            paceText: projection.flatMap {
-                                paceComparisonText(projection: $0,
-                                                   currentPercent: limit.percent,
-                                                   resetsAt: limit.resetsAt,
-                                                   now: clock)
-                            },
-                            series: series)
+                            forecast: projection.flatMap {
+                                burnForecast(projection: $0,
+                                             currentPercent: limit.percent,
+                                             resetsAt: limit.resetsAt,
+                                             now: clock)
+                            })
         }
     }
 
@@ -355,14 +364,20 @@ public final class MeterViewModel: ObservableObject {
             }
     }
 
-    private func paceComparisonText(projection: BurnProjection,
-                                    currentPercent: Double,
-                                    resetsAt: Date,
-                                    now: Date) -> String? {
+    private func burnForecast(projection: BurnProjection,
+                              currentPercent: Double,
+                              resetsAt: Date,
+                              now: Date) -> BurnForecast? {
         let hoursUntilReset = resetsAt.timeIntervalSince(now) / 3600.0
         guard hoursUntilReset > 0 else { return nil }
         let safeRate = max(0, (100 - currentPercent) / hoursUntilReset)
-        return "\(Self.rateText(projection.ratePerHour)) now vs \(Self.rateText(safeRate)) safe"
+        let limitText = projection.willExhaustBeforeReset
+            ? "Limit in \(Self.durationText(projection.timeToLimit))"
+            : "Reset comes first"
+        return BurnForecast(rateText: "\(Self.rateText(projection.ratePerHour)) burn",
+                            limitText: limitText,
+                            detailText: "\(Self.rateText(projection.ratePerHour)) now vs \(Self.rateText(safeRate)) safe",
+                            isUrgent: projection.willExhaustBeforeReset)
     }
 
     private static func rateText(_ rate: Double) -> String {
@@ -370,6 +385,16 @@ public final class MeterViewModel: ObservableObject {
             return "+\(Int(rate.rounded()))%/h"
         }
         return String(format: "+%.1f%%/h", rate)
+    }
+
+    private static func durationText(_ seconds: TimeInterval) -> String {
+        let secs = max(0, Int(seconds))
+        let days = secs / 86400
+        let hours = (secs % 86400) / 3600
+        let mins = (secs % 3600) / 60
+        if days > 0 { return "\(days)d \(hours)h" }
+        if hours > 0 { return "\(hours)h \(mins)m" }
+        return "\(max(1, mins))m"
     }
 
     private static func durationText(to date: Date, now: Date) -> String {

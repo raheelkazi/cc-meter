@@ -354,11 +354,13 @@ final class MeterViewModelTests: XCTestCase {
                                 history: history, now: { self.now })
         await vm.refresh()
         XCTAssertNotNil(vm.rows.first?.burn)
-        XCTAssertEqual(vm.rows.first?.paceText, "+20%/h now vs +4.0%/h safe")
-        XCTAssertGreaterThan(vm.rows.first?.series.count ?? 0, 1)
+        XCTAssertEqual(vm.rows.first?.forecast?.rateText, "+20%/h burn")
+        XCTAssertEqual(vm.rows.first?.forecast?.limitText, "Limit in 2h 0m")
+        XCTAssertEqual(vm.rows.first?.forecast?.detailText, "+20%/h now vs +4.0%/h safe")
+        XCTAssertTrue(vm.rows.first?.forecast?.isUrgent ?? false)
     }
 
-    func testBurnAndSeriesIgnorePriorWindowSamples() async {
+    func testBurnForecastIgnoresPriorWindowSamples() async {
         // A steep rising trend, but all in the *previous* window (different reset).
         let oldReset = now.addingTimeInterval(-60)
         let priorWindow = stride(from: 0, through: 60, by: 15).map {
@@ -375,17 +377,17 @@ final class MeterViewModelTests: XCTestCase {
         let vm = MeterViewModel(client: StubClient(.success(usage)),
                                 history: history, now: { self.now })
         await vm.refresh()
-        // Only the single new-window sample counts: no false projection, and the
-        // sparkline reflects the fresh window, not the old steep climb.
+        // Only the single new-window sample counts: no false projection from the
+        // old steep climb.
         XCTAssertNil(vm.rows.first?.burn)
-        XCTAssertEqual(vm.rows.first?.series, [2])
+        XCTAssertNil(vm.rows.first?.forecast)
     }
 
-    func testBurnAndSeriesToleratePriorSampleResetJitter() async {
+    func testBurnForecastToleratesPriorSampleResetJitter() async {
         // Same window, but every fetch recorded a slightly different resets_at
         // (the endpoint jitters it sub-second). All samples must still count:
         // exact-equality matching wrongly dropped all but the latest, killing
-        // the sparkline and burn projection.
+        // the burn projection.
         let baseReset = now.addingTimeInterval(5 * 3600)
         let samples = Array(stride(from: 0, through: 60, by: 15)).enumerated().map { index, minute in
             HistorySample(kindLabel: "5-hour",
@@ -401,8 +403,8 @@ final class MeterViewModelTests: XCTestCase {
         let vm = MeterViewModel(client: StubClient(.success(usage)),
                                 history: history, now: { self.now })
         await vm.refresh()
-        XCTAssertGreaterThan(vm.rows.first?.series.count ?? 0, 1)
-        XCTAssertNotNil(vm.rows.first?.burn)
+        XCTAssertEqual(vm.rows.first?.forecast?.rateText, "+20%/h burn")
+        XCTAssertNotNil(vm.rows.first?.forecast)
     }
 
     func testApplyFlipsDisplayModeWhenDefaultChanges() {

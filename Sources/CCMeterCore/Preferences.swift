@@ -13,7 +13,7 @@ public struct Preferences: Codable, Equatable {
     public var sessionResetHeadsUpMinutes: Int?
     /// Which value the popover/menu bar shows by default on launch.
     public var defaultShowRemaining: Bool
-    /// Whether usage samples are recorded to disk for the trend sparkline.
+    /// Whether usage samples are recorded to disk for burn forecasts.
     public var historyEnabled: Bool
     /// Whether the app should relaunch at login (managed via a LaunchAgent).
     public var launchAtLogin: Bool

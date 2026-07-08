@@ -84,24 +84,12 @@ struct PopoverView: View {
                 }
             }
             .frame(height: 6)
-            HStack(spacing: 6) {
+            HStack {
                 Text(row.countdown).font(.caption2).foregroundStyle(.secondary)
-                if let burn = row.burn {
-                    Text("·").font(.caption2).foregroundStyle(.tertiary)
-                    Text(burn)
-                        .font(.caption2)
-                        .foregroundStyle(row.burnUrgent ? Color(nsColor: .systemRed) : .secondary)
-                }
                 Spacer()
-                if row.series.count > 1 {
-                    Sparkline(values: row.series, color: row.color.swiftUIColor)
-                        .frame(width: 44, height: 12)
-                }
             }
-            if let paceText = row.paceText {
-                Text(paceText)
-                    .font(.caption2)
-                    .foregroundStyle(row.burnUrgent ? Color(nsColor: .systemRed) : .secondary)
+            if let forecast = row.forecast {
+                forecastView(forecast)
             }
         }
     }
@@ -126,6 +114,9 @@ struct PopoverView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                if let forecast = hero.forecast {
+                    forecastPills(forecast)
+                }
             }
             Spacer(minLength: 0)
         }
@@ -141,10 +132,43 @@ struct PopoverView: View {
     }
 
     private func heroDetail(_ hero: MeterHero) -> String {
-        if let burn = hero.burn {
-            return "At current pace, \(burn). \(hero.countdown)."
+        if let forecast = hero.forecast {
+            return "At current pace, \(forecast.limitText.lowercased()). \(hero.countdown)."
         }
         return hero.countdown
+    }
+
+    @ViewBuilder private func forecastView(_ forecast: BurnForecast) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            forecastPills(forecast)
+            Text(forecast.detailText)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.top, 2)
+    }
+
+    @ViewBuilder private func forecastPills(_ forecast: BurnForecast) -> some View {
+        HStack(spacing: 6) {
+            forecastPill(forecast.rateText,
+                         foreground: Color.secondary,
+                         background: Color.gray.opacity(0.12))
+            forecastPill(forecast.limitText,
+                         foreground: forecast.isUrgent ? Color(nsColor: .systemRed) : Color.secondary,
+                         background: (forecast.isUrgent ? Color(nsColor: .systemRed) : Color.gray).opacity(0.12))
+        }
+    }
+
+    @ViewBuilder private func forecastPill(_ text: String,
+                                           foreground: Color,
+                                           background: Color) -> some View {
+        Text(text)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(foreground)
+            .lineLimit(1)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(Capsule().fill(background))
     }
 
     @ViewBuilder private func staleSnapshotView(_ stale: StaleSnapshot) -> some View {
@@ -219,33 +243,6 @@ struct PopoverView: View {
                 Text("Unexpected response from the usage service.").foregroundStyle(.secondary)
                 Text(message).font(.caption2).foregroundStyle(.tertiary)
             }
-        }
-    }
-}
-
-/// Dependency-free sparkline: normalizes `values` to the view height and strokes
-/// a polyline. Avoids pulling in the Charts framework for a 44pt trend line.
-private struct Sparkline: View {
-    let values: [Double]
-    let color: Color
-
-    var body: some View {
-        GeometryReader { geo in
-            Path { path in
-                guard values.count > 1 else { return }
-                let maxV = values.max() ?? 1
-                let minV = values.min() ?? 0
-                let span = max(1, maxV - minV)
-                let stepX = geo.size.width / CGFloat(values.count - 1)
-                for (i, v) in values.enumerated() {
-                    let x = CGFloat(i) * stepX
-                    // Invert Y so higher usage sits higher in the sparkline.
-                    let y = geo.size.height * (1 - CGFloat((v - minV) / span))
-                    let point = CGPoint(x: x, y: y)
-                    if i == 0 { path.move(to: point) } else { path.addLine(to: point) }
-                }
-            }
-            .stroke(color, style: StrokeStyle(lineWidth: 1.2, lineJoin: .round))
         }
     }
 }

@@ -65,7 +65,7 @@ struct SettingsView: View {
                 card("Display") {
                     Toggle("Show remaining instead of used by default",
                            isOn: $prefs.defaultShowRemaining)
-                    Toggle("Record usage history (trend sparklines)",
+                    Toggle("Record usage history (burn forecasts)",
                            isOn: $prefs.historyEnabled)
                 }
 

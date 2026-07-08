@@ -41,26 +41,6 @@ final class UsageHistoryTests: XCTestCase {
         XCTAssertEqual(all.map(\.percent), [50])  // the old 5% was pruned
     }
 
-    func testSeriesDownsampleKeepsEndpoints() {
-        let samples = (0..<100).map {
-            HistorySample(kindLabel: "5-hour", percent: Double($0),
-                          at: start.addingTimeInterval(Double($0)))
-        }
-        let store = InMemoryHistoryStore(samples: samples)
-        let series = store.series(kindLabel: "5-hour", maxPoints: 10)
-        XCTAssertEqual(series.count, 10)
-        XCTAssertEqual(series.first, 0)
-        XCTAssertEqual(series.last, 99)
-    }
-
-    func testSeriesReturnsAllWhenUnderMax() {
-        let store = InMemoryHistoryStore(samples: [
-            HistorySample(kindLabel: "5-hour", percent: 1, at: start),
-            HistorySample(kindLabel: "5-hour", percent: 2, at: start.addingTimeInterval(1))
-        ])
-        XCTAssertEqual(store.series(kindLabel: "5-hour", maxPoints: 24), [1, 2])
-    }
-
     func testFileStorePersistsAcrossInstances() throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("cc-meter-history-\(UUID().uuidString).json")
