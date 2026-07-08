@@ -5,12 +5,28 @@ public struct HistorySample: Codable, Equatable {
     public let kindLabel: String
     public let percent: Double
     public let at: Date
+    /// The reset time of the window this sample belongs to. Lets consumers avoid
+    /// mixing samples across a window reset (a fresh window shouldn't inherit the
+    /// old window's burn rate or trend). Optional so older stored files decode.
+    public let windowResetsAt: Date?
 
-    public init(kindLabel: String, percent: Double, at: Date) {
+    public init(kindLabel: String, percent: Double, at: Date, windowResetsAt: Date? = nil) {
         self.kindLabel = kindLabel
         self.percent = percent
         self.at = at
+        self.windowResetsAt = windowResetsAt
     }
+}
+
+/// Evenly-spaced downsample keeping the first and last values, for sparklines.
+public func downsampleSeries(_ values: [Double], maxPoints: Int) -> [Double] {
+    guard maxPoints > 0, values.count > maxPoints else { return values }
+    var result: [Double] = []
+    let step = Double(values.count - 1) / Double(maxPoints - 1)
+    for i in 0..<maxPoints {
+        result.append(values[Int((Double(i) * step).rounded())])
+    }
+    return result
 }
 
 public protocol HistoryStoring: AnyObject {
@@ -35,14 +51,7 @@ enum HistoryMath {
     /// endpoints (the trend's start and current value).
     static func series(_ samples: [HistorySample], kindLabel: String, maxPoints: Int) -> [Double] {
         let ordered = samples.filter { $0.kindLabel == kindLabel }.sorted { $0.at < $1.at }
-        let values = ordered.map(\.percent)
-        guard maxPoints > 0, values.count > maxPoints else { return values }
-        var result: [Double] = []
-        let step = Double(values.count - 1) / Double(maxPoints - 1)
-        for i in 0..<maxPoints {
-            result.append(values[Int((Double(i) * step).rounded())])
-        }
-        return result
+        return downsampleSeries(ordered.map(\.percent), maxPoints: maxPoints)
     }
 
     static func pruned(_ samples: [HistorySample], now: Date, retention: TimeInterval) -> [HistorySample] {
@@ -83,7 +92,8 @@ public final class FileHistoryStore: HistoryStoring {
     public func record(_ usage: Usage) {
         let clock = now()
         for limit in usage.limits {
-            samples.append(HistorySample(kindLabel: limit.kind.label, percent: limit.percent, at: clock))
+            samples.append(HistorySample(kindLabel: limit.kind.label, percent: limit.percent,
+                                         at: clock, windowResetsAt: limit.resetsAt))
         }
         samples = HistoryMath.pruned(samples, now: clock, retention: retention)
         persist()
@@ -120,7 +130,8 @@ public final class InMemoryHistoryStore: HistoryStoring {
     public func record(_ usage: Usage) {
         let clock = now()
         for limit in usage.limits {
-            samples.append(HistorySample(kindLabel: limit.kind.label, percent: limit.percent, at: clock))
+            samples.append(HistorySample(kindLabel: limit.kind.label, percent: limit.percent,
+                                         at: clock, windowResetsAt: limit.resetsAt))
         }
         samples = HistoryMath.pruned(samples, now: clock, retention: retention)
     }

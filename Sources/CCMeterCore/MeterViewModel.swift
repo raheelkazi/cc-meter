@@ -46,6 +46,12 @@ public final class MeterViewModel: ObservableObject {
     /// skipped: retrying early burns the shared rate budget and extends the
     /// throttle. Manual Refresh still goes through.
     private var backoffUntil: Date?
+    /// Guards against overlapping fetches. Two refreshes racing (a timer tick and
+    /// a manual Refresh, say) could each hit the 401 path and fire concurrent
+    /// token refreshes with the same refresh token, invalidating the grant and
+    /// leaving the Keychain in a bad state. `@MainActor` makes this flag a safe
+    /// mutex across the awaits inside `refresh()`.
+    private var isFetching = false
 
     /// Window of history used to estimate burn rate; long enough to smooth a poll
     /// or two of noise, short enough to react to a fresh spike.
@@ -100,6 +106,13 @@ public final class MeterViewModel: ObservableObject {
     }
 
     public func refresh() async {
+        // Coalesce concurrent refreshes; a fetch already in flight will publish
+        // fresh data for everyone, so a second overlapping call is redundant and
+        // unsafe (see `isFetching`).
+        guard !isFetching else { return }
+        isFetching = true
+        defer { isFetching = false }
+
         let result = await client.fetch()
         switch result {
         case .success(let usage):
@@ -208,12 +221,17 @@ public final class MeterViewModel: ObservableObject {
             let displayPercent = mode == .used ? used.percent : (100 - used.percent)
             let label = limit.kind.label
 
-            let samples = history?.recent(kindLabel: label, since: clock.addingTimeInterval(-burnWindow)) ?? []
-            let projection = burnProjection(samples: samples,
+            // Only consider samples from the current window: after a reset the old
+            // window's percentages must not pollute the burn rate or the trend.
+            // (Legacy samples without a recorded window are treated as matching.)
+            let windowSamples = (history?.recent(kindLabel: label, since: .distantPast) ?? [])
+                .filter { $0.windowResetsAt == nil || $0.windowResetsAt == limit.resetsAt }
+            let burnSamples = windowSamples.filter { $0.at >= clock.addingTimeInterval(-burnWindow) }
+            let projection = burnProjection(samples: burnSamples,
                                             currentPercent: limit.percent,
                                             resetsAt: limit.resetsAt,
                                             now: clock)
-            let series = history?.series(kindLabel: label, maxPoints: sparklinePoints) ?? []
+            let series = downsampleSeries(windowSamples.map(\.percent), maxPoints: sparklinePoints)
 
             // Index-prefixed id stays unique even if two windows share a label.
             return MeterRow(id: "\(index)-\(label)",

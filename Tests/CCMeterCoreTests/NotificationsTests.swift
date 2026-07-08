@@ -60,15 +60,30 @@ final class NotificationsTests: XCTestCase {
         XCTAssertTrue(n.evaluate(sessionUsage(85), preferences: prefs(enabled: true), now: now).isEmpty)
     }
 
-    func testHeadsUpFiresOnceWithinWindow() {
+    func testHeadsUpFiresOnceOnTransitionIntoWindow() {
         let n = ThresholdNotifier()
         let p = prefs(thresholds: [], headsUp: 10)
-        // Reset is 5 minutes away -> within the 10-minute heads-up.
-        let events = n.evaluate(sessionUsage(30, resetsIn: 300), preferences: p, now: now)
+        // Same window throughout (fixed reset); `now` advances toward it. First
+        // seen far from reset, later crosses into the 10-minute range -> fires once.
+        let reset = now.addingTimeInterval(3600)
+        func usage(_ percent: Double) -> Usage {
+            Usage(limits: [UsageLimit(kind: .session, percent: percent, resetsAt: reset, isActive: true)],
+                  fetchedAt: now)
+        }
+        _ = n.evaluate(usage(30), preferences: p, now: now)                                  // 1h left
+        let events = n.evaluate(usage(31), preferences: p, now: reset.addingTimeInterval(-300))  // 5m left
         XCTAssertEqual(events.count, 1)
         XCTAssertTrue(events[0].id.contains("reset-headsup"))
         // Does not re-fire for the same window.
-        XCTAssertTrue(n.evaluate(sessionUsage(31, resetsIn: 300), preferences: p, now: now).isEmpty)
+        XCTAssertTrue(n.evaluate(usage(32), preferences: p, now: reset.addingTimeInterval(-240)).isEmpty)
+    }
+
+    func testHeadsUpSuppressedWhenFirstSeenInsideWindow() {
+        // Simulates relaunching cc-meter while already inside the heads-up range:
+        // the user was alerted before the restart, so don't replay it.
+        let n = ThresholdNotifier()
+        let p = prefs(thresholds: [], headsUp: 10)
+        XCTAssertTrue(n.evaluate(sessionUsage(30, resetsIn: 300), preferences: p, now: now).isEmpty)
     }
 
     func testHeadsUpDoesNotFireWhenFarFromReset() {

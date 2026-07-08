@@ -331,6 +331,29 @@ final class MeterViewModelTests: XCTestCase {
         XCTAssertGreaterThan(vm.rows.first?.series.count ?? 0, 1)
     }
 
+    func testBurnAndSeriesIgnorePriorWindowSamples() async {
+        // A steep rising trend, but all in the *previous* window (different reset).
+        let oldReset = now.addingTimeInterval(-60)
+        let priorWindow = stride(from: 0, through: 60, by: 15).map {
+            HistorySample(kindLabel: "5-hour", percent: 40 + Double($0),
+                          at: now.addingTimeInterval(Double($0 - 120) * 60),
+                          windowResetsAt: oldReset)
+        }
+        let history = InMemoryHistoryStore(samples: priorWindow, now: { self.now })
+        // Fresh window: reset moved forward, usage dropped to ~2%.
+        let usage = Usage(limits: [
+            UsageLimit(kind: .session, percent: 2,
+                       resetsAt: now.addingTimeInterval(5 * 3600), isActive: true)
+        ], fetchedAt: now)
+        let vm = MeterViewModel(client: StubClient(.success(usage)),
+                                history: history, now: { self.now })
+        await vm.refresh()
+        // Only the single new-window sample counts: no false projection, and the
+        // sparkline reflects the fresh window, not the old steep climb.
+        XCTAssertNil(vm.rows.first?.burn)
+        XCTAssertEqual(vm.rows.first?.series, [2])
+    }
+
     func testSpendExposedFromState() async {
         let usage = Usage(limits: [], spend: Spend(amount: 3.2, limit: 10, currency: "USD"), fetchedAt: now)
         let vm = MeterViewModel(client: StubClient(.success(usage)), now: { self.now })

@@ -59,7 +59,14 @@ public final class ThresholdNotifier {
             if let mins = preferences.sessionResetHeadsUpMinutes, limit.kind == .session {
                 let secondsLeft = limit.resetsAt.timeIntervalSince(now)
                 let key = "\(label)@\(limit.resetsAt.timeIntervalSince1970)"
-                if secondsLeft > 0, secondsLeft <= Double(mins * 60), !firedHeadsUp.contains(key) {
+                let withinWindow = secondsLeft > 0 && secondsLeft <= Double(mins * 60)
+                if isNewWindow && withinWindow {
+                    // First time we see this window and we're already inside the
+                    // heads-up range (e.g. relaunched mid-window): suppress rather
+                    // than replay an alert the user already got. Only a live
+                    // transition into the range should fire.
+                    firedHeadsUp.insert(key)
+                } else if withinWindow && !firedHeadsUp.contains(key) {
                     events.append(Self.headsUpEvent(limit: limit, now: now))
                     firedHeadsUp.insert(key)
                 }

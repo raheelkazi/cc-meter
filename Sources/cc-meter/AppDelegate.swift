@@ -9,6 +9,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var viewModel: MeterViewModel?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Bail out if another cc-meter is already running (e.g. launch-at-login
+        // plus a manual start) so we don't double up menu bar items or pollers.
+        guard SingleInstance.acquire() else {
+            NSApplication.shared.terminate(nil)
+            return
+        }
+
         // Reflect the real login-item state so the toggle isn't lying on launch.
         var preferences = preferencesStore.load()
         preferences.launchAtLogin = LoginItem.isEnabled
