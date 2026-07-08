@@ -354,6 +354,48 @@ final class MeterViewModelTests: XCTestCase {
         XCTAssertEqual(vm.rows.first?.series, [2])
     }
 
+    func testBurnAndSeriesToleratePriorSampleResetJitter() async {
+        // Same window, but every fetch recorded a slightly different resets_at
+        // (the endpoint jitters it sub-second). All samples must still count:
+        // exact-equality matching wrongly dropped all but the latest, killing
+        // the sparkline and burn projection.
+        let baseReset = now.addingTimeInterval(5 * 3600)
+        let samples = Array(stride(from: 0, through: 60, by: 15)).enumerated().map { index, minute in
+            HistorySample(kindLabel: "5-hour",
+                          percent: 40 + Double(minute) / 3,
+                          at: now.addingTimeInterval(Double(minute - 60) * 60),
+                          windowResetsAt: baseReset.addingTimeInterval(Double(index) * 0.2))
+        }
+        let history = InMemoryHistoryStore(samples: samples, now: { self.now })
+        let usage = Usage(limits: [
+            UsageLimit(kind: .session, percent: 60,
+                       resetsAt: baseReset.addingTimeInterval(0.9), isActive: true)
+        ], fetchedAt: now)
+        let vm = MeterViewModel(client: StubClient(.success(usage)),
+                                history: history, now: { self.now })
+        await vm.refresh()
+        XCTAssertGreaterThan(vm.rows.first?.series.count ?? 0, 1)
+        XCTAssertNotNil(vm.rows.first?.burn)
+    }
+
+    func testApplyFlipsDisplayModeWhenDefaultChanges() {
+        let vm = MeterViewModel(client: StubClient(.success(sampleUsage())), now: { self.now })
+        XCTAssertEqual(vm.displayMode, .used)
+        vm.apply(Preferences(defaultShowRemaining: true))
+        XCTAssertEqual(vm.displayMode, .remaining)
+        vm.apply(Preferences(defaultShowRemaining: false))
+        XCTAssertEqual(vm.displayMode, .used)
+    }
+
+    func testApplyDoesNotStompManualToggleWhenDefaultUnchanged() {
+        let vm = MeterViewModel(client: StubClient(.success(sampleUsage())), now: { self.now })
+        vm.toggleMode()
+        XCTAssertEqual(vm.displayMode, .remaining)
+        // Unrelated edit; defaultShowRemaining still false, so don't override.
+        vm.apply(Preferences(pollInterval: 200))
+        XCTAssertEqual(vm.displayMode, .remaining)
+    }
+
     func testSpendExposedFromState() async {
         let usage = Usage(limits: [], spend: Spend(amount: 3.2, limit: 10, currency: "USD"), fetchedAt: now)
         let vm = MeterViewModel(client: StubClient(.success(usage)), now: { self.now })
