@@ -28,6 +28,7 @@ public struct StaleSnapshot: Equatable {
 public struct MeterRow: Identifiable {
     public let id: String
     public let label: String
+    public let isPromoted: Bool
     public let displayPercent: Int
     public let barFraction: Double
     public let color: MeterColor
@@ -274,9 +275,18 @@ public final class MeterViewModel: ObservableObject {
 
     private func mostConstrainedLimit() -> UsageLimit? {
         guard case .ok(let usage) = state else { return nil }
-        let active = usage.limits.filter { $0.isActive }
-        let pool = active.isEmpty ? usage.limits : active
-        return pool.max(by: { $0.percent < $1.percent })
+        return mostConstrainedIndexedLimit(in: usage)?.limit
+    }
+
+    private func mostConstrainedIndexedLimit(in usage: Usage) -> (index: Int, limit: UsageLimit)? {
+        let indexed = usage.limits.enumerated().map { (index: $0.offset, limit: $0.element) }
+        let active = indexed.filter { $0.limit.isActive }
+        let pool = active.isEmpty ? indexed : active
+        return pool.max(by: { $0.limit.percent < $1.limit.percent })
+    }
+
+    public var detailRows: [MeterRow] {
+        rows.filter { !$0.isPromoted }
     }
 
     private func heroStatus(label: String, color: MeterColor, burnUrgent: Bool) -> String {
@@ -299,6 +309,7 @@ public final class MeterViewModel: ObservableObject {
         guard case .ok(let usage) = state else { return [] }
         let mode = displayMode
         let clock = now()
+        let promotedIndex = mostConstrainedIndexedLimit(in: usage)?.index
         return usage.limits.enumerated().map { index, limit in
             let used = summarize(limit)
             let displayPercent = mode == .used ? used.percent : (100 - used.percent)
@@ -314,6 +325,7 @@ public final class MeterViewModel: ObservableObject {
             // Index-prefixed id stays unique even if two windows share a label.
             return MeterRow(id: "\(index)-\(label)",
                             label: label,
+                            isPromoted: index == promotedIndex,
                             displayPercent: displayPercent,
                             barFraction: Double(displayPercent) / 100.0,
                             color: used.color,

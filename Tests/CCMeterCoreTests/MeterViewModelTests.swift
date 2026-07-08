@@ -63,6 +63,8 @@ final class MeterViewModelTests: XCTestCase {
         XCTAssertEqual(vm.hero?.label, "7-day (Fable)")
         XCTAssertEqual(vm.hero?.percent, 54)       // always used percent, not remaining-mode display
         XCTAssertEqual(vm.hero?.status, "7-day (Fable) is warm")
+        XCTAssertEqual(vm.detailRows.map(\.label), ["5-hour", "7-day"])
+        XCTAssertEqual(vm.rows.filter(\.isPromoted).map(\.label), ["7-day (Fable)"])
     }
 
     func testRemainingModeInvertsPercent() async {

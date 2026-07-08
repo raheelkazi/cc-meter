@@ -57,10 +57,11 @@ struct PopoverView: View {
         case .error(let err):
             errorView(err)
         case .ok:
+            let rows = viewModel.detailRows
             if viewModel.rows.isEmpty {
                 Text("No active limits reported.").foregroundStyle(.secondary)
             } else {
-                ForEach(viewModel.rows) { rowView($0) }
+                ForEach(rows) { rowView($0) }
             }
         }
     }

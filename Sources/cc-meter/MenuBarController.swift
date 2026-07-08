@@ -23,7 +23,7 @@ final class MenuBarController {
             button.action = #selector(togglePopover)
         }
         popover.behavior = .transient
-        popover.contentSize = NSSize(width: 340, height: 420)
+        popover.contentSize = NSSize(width: 340, height: 360)
         let root = PopoverView(viewModel: viewModel, onOpenSettings: { [weak self] in
             self?.popover.performClose(nil)
             self?.onOpenSettings()
@@ -66,7 +66,35 @@ final class MenuBarController {
             popover.performClose(nil)
         } else {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            pinPopover(to: button)
+            DispatchQueue.main.async { [weak self, weak button] in
+                guard let self, let button else { return }
+                self.pinPopover(to: button)
+            }
             popover.contentViewController?.view.window?.makeKey()
         }
+    }
+
+    private func pinPopover(to button: NSStatusBarButton) {
+        guard let window = popover.contentViewController?.view.window,
+              let buttonWindow = button.window else { return }
+
+        let buttonRectInWindow = button.convert(button.bounds, to: nil)
+        let buttonFrame = buttonWindow.convertToScreen(buttonRectInWindow)
+        let screen = buttonWindow.screen ?? NSScreen.main
+        let visibleFrame = screen?.visibleFrame
+        let gap: CGFloat = 3
+
+        var frame = window.frame
+        frame.origin.y = buttonFrame.minY - gap - frame.height
+
+        if let visibleFrame {
+            let inset: CGFloat = 4
+            frame.origin.x = min(max(frame.origin.x, visibleFrame.minX + inset),
+                                 visibleFrame.maxX - frame.width - inset)
+            frame.origin.y = max(frame.origin.y, visibleFrame.minY + inset)
+        }
+
+        window.setFrame(frame, display: true)
     }
 }
