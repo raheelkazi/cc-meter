@@ -16,6 +16,13 @@ public struct MeterRow: Identifiable {
     public let barFraction: Double
     public let color: MeterColor
     public let countdown: String
+    /// Time-to-exhaustion projection, e.g. "~40m to limit", or nil when the pace
+    /// is flat/insufficient to project.
+    public let burn: String?
+    /// True when the projection exhausts the window before it resets (worth emphasis).
+    public let burnUrgent: Bool
+    /// Recent used-percent samples for a trend sparkline (empty when no history).
+    public let series: [Double]
 }
 
 @MainActor
@@ -26,26 +33,50 @@ public final class MeterViewModel: ObservableObject {
     @Published public private(set) var lastUpdated: Date?
 
     private let client: UsageFetching
-    private let interval: TimeInterval
+    private var interval: TimeInterval
     private let store: UsageStoring?
     private let cacheMaxAge: TimeInterval
     private let now: () -> Date
+    private let history: HistoryStoring?
+    private let notifier: ThresholdNotifier?
+    private let notificationSink: Notifying?
+    private var preferences: Preferences
     private var timer: Timer?
     /// Server-directed quiet period after a 429. Timer polls inside it are
     /// skipped: retrying early burns the shared rate budget and extends the
     /// throttle. Manual Refresh still goes through.
     private var backoffUntil: Date?
+    /// Guards against overlapping fetches. Two refreshes racing (a timer tick and
+    /// a manual Refresh, say) could each hit the 401 path and fire concurrent
+    /// token refreshes with the same refresh token, invalidating the grant and
+    /// leaving the Keychain in a bad state. `@MainActor` makes this flag a safe
+    /// mutex across the awaits inside `refresh()`.
+    private var isFetching = false
+
+    /// Window of history used to estimate burn rate; long enough to smooth a poll
+    /// or two of noise, short enough to react to a fresh spike.
+    private let burnWindow: TimeInterval = 2 * 3600
+    private let sparklinePoints = 24
 
     public init(client: UsageFetching,
                 interval: TimeInterval = 60,
                 store: UsageStoring? = nil,
                 cacheMaxAge: TimeInterval = 24 * 3600,
+                preferences: Preferences = Preferences(),
+                history: HistoryStoring? = nil,
+                notifier: ThresholdNotifier? = nil,
+                notificationSink: Notifying? = nil,
                 now: @escaping () -> Date = { Date() }) {
         self.client = client
         self.interval = interval
         self.store = store
         self.cacheMaxAge = cacheMaxAge
+        self.preferences = preferences
+        self.history = history
+        self.notifier = notifier
+        self.notificationSink = notificationSink
         self.now = now
+        self.displayMode = preferences.defaultShowRemaining ? .remaining : .used
     }
 
     /// Kicks off an immediate fetch and schedules periodic refreshes.
@@ -54,6 +85,11 @@ public final class MeterViewModel: ObservableObject {
     public func start() {
         loadCachedUsage()
         refreshNow()
+        scheduleTimer()
+    }
+
+    private func scheduleTimer() {
+        timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             // The Timer callback is nonisolated; hop to the main actor and refresh.
             Task { @MainActor in await self?.refreshIfNotBackedOff() }
@@ -70,6 +106,13 @@ public final class MeterViewModel: ObservableObject {
     }
 
     public func refresh() async {
+        // Coalesce concurrent refreshes; a fetch already in flight will publish
+        // fresh data for everyone, so a second overlapping call is redundant and
+        // unsafe (see `isFetching`).
+        guard !isFetching else { return }
+        isFetching = true
+        defer { isFetching = false }
+
         let result = await client.fetch()
         switch result {
         case .success(let usage):
@@ -77,6 +120,8 @@ public final class MeterViewModel: ObservableObject {
             lastUpdated = now()
             backoffUntil = nil
             store?.save(SavedUsage(usage: usage, savedAt: now()))
+            if preferences.historyEnabled { history?.record(usage) }
+            dispatchNotifications(for: usage)
         case .failure(let error):
             if case .rateLimited(let retryAfter) = error {
                 // Honor the server's back-off, but never poll faster than the
@@ -104,8 +149,26 @@ public final class MeterViewModel: ObservableObject {
         lastUpdated = saved.savedAt
     }
 
+    /// Applies updated preferences at runtime: re-reads polling cadence (restarting
+    /// the timer if it changed) and display default. Threshold/history changes take
+    /// effect on the next fetch.
+    public func apply(_ preferences: Preferences) {
+        let normalized = preferences.normalized()
+        let intervalChanged = normalized.pollInterval != self.interval
+        self.preferences = normalized
+        self.interval = normalized.pollInterval
+        if intervalChanged, timer != nil { scheduleTimer() }
+    }
+
     public func toggleMode() {
         displayMode = (displayMode == .used) ? .remaining : .used
+    }
+
+    private func dispatchNotifications(for usage: Usage) {
+        guard let notifier, let sink = notificationSink else { return }
+        for event in notifier.evaluate(usage, preferences: preferences, now: now()) {
+            sink.post(event)
+        }
     }
 
     private func isTransient(_ error: UsageError) -> Bool {
@@ -142,6 +205,13 @@ public final class MeterViewModel: ObservableObject {
         return summarize(top)
     }
 
+    /// Spend/extra-credit info from the last successful fetch, if the endpoint
+    /// reported any.
+    public var spend: Spend? {
+        guard case .ok(let usage) = state else { return nil }
+        return usage.spend
+    }
+
     public var rows: [MeterRow] {
         guard case .ok(let usage) = state else { return [] }
         let mode = displayMode
@@ -149,13 +219,30 @@ public final class MeterViewModel: ObservableObject {
         return usage.limits.enumerated().map { index, limit in
             let used = summarize(limit)
             let displayPercent = mode == .used ? used.percent : (100 - used.percent)
+            let label = limit.kind.label
+
+            // Only consider samples from the current window: after a reset the old
+            // window's percentages must not pollute the burn rate or the trend.
+            // (Legacy samples without a recorded window are treated as matching.)
+            let windowSamples = (history?.recent(kindLabel: label, since: .distantPast) ?? [])
+                .filter { $0.windowResetsAt == nil || $0.windowResetsAt == limit.resetsAt }
+            let burnSamples = windowSamples.filter { $0.at >= clock.addingTimeInterval(-burnWindow) }
+            let projection = burnProjection(samples: burnSamples,
+                                            currentPercent: limit.percent,
+                                            resetsAt: limit.resetsAt,
+                                            now: clock)
+            let series = downsampleSeries(windowSamples.map(\.percent), maxPoints: sparklinePoints)
+
             // Index-prefixed id stays unique even if two windows share a label.
-            return MeterRow(id: "\(index)-\(limit.kind.label)",
-                            label: limit.kind.label,
+            return MeterRow(id: "\(index)-\(label)",
+                            label: label,
                             displayPercent: displayPercent,
                             barFraction: Double(displayPercent) / 100.0,
                             color: used.color,
-                            countdown: countdownText(to: limit.resetsAt, now: clock))
+                            countdown: countdownText(to: limit.resetsAt, now: clock),
+                            burn: projection.map(burnText),
+                            burnUrgent: projection?.willExhaustBeforeReset ?? false,
+                            series: series)
         }
     }
 }

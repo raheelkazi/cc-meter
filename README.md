@@ -36,16 +36,45 @@ Upgrade later with `brew upgrade cc-meter`.
 
 The app runs as a menu bar accessory (no dock icon). Click the menu bar item for
 the full breakdown. Use the Used/Left button to switch between used and remaining
-views, Refresh to fetch immediately, and Quit to exit.
+views, Refresh to fetch immediately, Settings… to open preferences, and Quit to
+exit.
 
-Usage refreshes every minute.
+Usage refreshes every minute by default (configurable in Settings).
+
+## Features
+
+- **Live meter** for the 5-hour session, 7-day, and per-model weekly windows,
+  color-coded green/amber/red with a reset countdown.
+- **Threshold notifications**: get a macOS notification when a limit crosses
+  80% / 95% / 100% (configurable), plus an optional heads-up before the 5-hour
+  window resets. Alerts are edge-triggered, so you get one per crossing and they
+  re-arm after each window reset.
+- **Burn-rate projection**: each row shows an estimate like `~40m to limit` based
+  on your recent consumption, highlighted when you're on track to run out before
+  the window resets.
+- **Trend sparklines**: a small history-backed sparkline per limit so you can see
+  whether usage is climbing or flat.
+- **Spend / extra-credits row**: rendered when the usage endpoint reports it.
+- **Automatic token refresh**: on an expired token the app silently refreshes
+  using the stored refresh token and retries, falling back to a re-authenticate
+  message only if refresh isn't possible.
+- **Preferences window**: poll interval, notification thresholds, default
+  used/remaining view, history on/off, and launch-at-login.
 
 ## How it works
 
 - Token: macOS Keychain, generic password, service `Claude Code-credentials`.
 - Endpoint: `GET https://api.anthropic.com/api/oauth/usage`.
-- If the token has expired, the app shows a re-authenticate message; run `claude`
-  to refresh it, and the meter recovers on the next poll.
+- On an expired token the app attempts a silent OAuth refresh and writes the new
+  token back to the Keychain. If refresh isn't possible it shows a
+  re-authenticate message; run `claude` and the meter recovers on the next poll.
+- History is stored locally at
+  `~/Library/Application Support/cc-meter/history.json`, bounded to the last 7
+  days. Preferences are stored in `UserDefaults`.
+- Launch-at-login installs a per-user LaunchAgent
+  (`~/Library/LaunchAgents/com.raheelkazi.cc-meter.plist`).
+- Notifications are delivered via `osascript` (macOS may ask you to allow
+  notifications for Script Editor the first time).
 
 ## Development
 
@@ -53,12 +82,8 @@ Usage refreshes every minute.
     swift build    # build
     swift run cc-meter
 
-The core logic (Keychain parse, HTTP client, decoding, usage color, view
+The core logic (preferences, Keychain parse/write, token refresh, HTTP client,
+decoding, usage color, burn-rate, history, notification rules, and the view
 model) lives in the `CCMeterCore` library and is unit-tested with injected
-fakes. The `cc-meter` executable is thin AppKit/SwiftUI glue.
-
-## Not yet implemented
-
-Spend/credits row, threshold notifications, launch-at-login, preferences UI, and
-automatic OAuth token refresh (v1 relies on the `claude` CLI keeping the Keychain
-token fresh).
+fakes. The `cc-meter` executable is thin AppKit/SwiftUI glue plus the platform
+adapters (Keychain/launchctl/osascript shell-outs).

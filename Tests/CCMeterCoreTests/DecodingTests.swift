@@ -29,4 +29,24 @@ final class DecodingTests: XCTestCase {
         let usage = try JSONDecoder().decode(UsageResponse.self, from: json).toUsage(now: Date())
         XCTAssertEqual(usage.limits.count, 0)
     }
+
+    func testSpendAbsentIsNil() throws {
+        let usage = try JSONDecoder().decode(UsageResponse.self, from: Fixtures.usageJSON)
+            .toUsage(now: Date())
+        XCTAssertNil(usage.spend)
+    }
+
+    func testSpendDecodesCentsToDollars() throws {
+        let usage = try JSONDecoder().decode(UsageResponse.self, from: Fixtures.usageWithSpendJSON)
+            .toUsage(now: Date())
+        XCTAssertEqual(usage.spend?.amount, 12.34)
+        XCTAssertEqual(usage.spend?.limit, 50.0)
+        XCTAssertEqual(usage.spend?.currency, "USD")
+        XCTAssertEqual(usage.spend?.percent ?? 0, 24.68, accuracy: 0.001)
+    }
+
+    func testSpendPercentNilWithoutLimit() {
+        let spend = Spend(amount: 5, limit: nil, currency: "USD")
+        XCTAssertNil(spend.percent)
+    }
 }

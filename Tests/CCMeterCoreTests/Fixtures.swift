@@ -23,4 +23,14 @@ enum Fixtures {
     static let credentialBlob = """
     {"claudeAiOauth":{"accessToken":"sk-test-abc123","refreshToken":"rt-test","expiresAt":1783113000000,"scopes":["user:inference"],"subscriptionType":"max"},"mcpOAuth":{}}
     """.data(using: .utf8)!
+
+    /// Usage response that also carries a `spend` object (provisional shape).
+    static let usageWithSpendJSON = """
+    {
+      "limits": [
+        { "kind": "session", "percent": 20, "resets_at": "2026-07-03T21:09:59+00:00", "is_active": true }
+      ],
+      "spend": { "used_cents": 1234, "limit_cents": 5000, "currency": "USD" }
+    }
+    """.data(using: .utf8)!
 }

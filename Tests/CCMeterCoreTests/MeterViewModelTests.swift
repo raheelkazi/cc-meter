@@ -18,6 +18,11 @@ private final class StubStore: UsageStoring {
     func load() -> SavedUsage? { saved }
 }
 
+private final class SpyNotifier: Notifying {
+    var events: [NotificationEvent] = []
+    func post(_ event: NotificationEvent) { events.append(event) }
+}
+
 @MainActor
 final class MeterViewModelTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_000_000)
@@ -286,5 +291,102 @@ final class MeterViewModelTests: XCTestCase {
                                 interval: 30, store: store, now: { self.now })
         await vm.refresh()
         XCTAssertEqual(store.saved, SavedUsage(usage: sampleUsage(), savedAt: now))
+    }
+
+    // MARK: - History, burn, spend, notifications
+
+    func testHistoryRecordedOnSuccessfulRefresh() async {
+        let history = InMemoryHistoryStore(now: { self.now })
+        let vm = MeterViewModel(client: StubClient(.success(sampleUsage())),
+                                history: history, now: { self.now })
+        await vm.refresh()
+        let samples = history.recent(kindLabel: "5-hour", since: now.addingTimeInterval(-1))
+        XCTAssertEqual(samples.map(\.percent), [3])
+    }
+
+    func testHistoryNotRecordedWhenDisabled() async {
+        let history = InMemoryHistoryStore(now: { self.now })
+        let vm = MeterViewModel(client: StubClient(.success(sampleUsage())),
+                                preferences: Preferences(historyEnabled: false),
+                                history: history, now: { self.now })
+        await vm.refresh()
+        XCTAssertTrue(history.recent(kindLabel: "5-hour", since: now.addingTimeInterval(-10_000)).isEmpty)
+    }
+
+    func testRowsSurfaceBurnProjectionFromHistory() async {
+        // Pre-seed a rising session trend over the last hour.
+        let samples = stride(from: 0, through: 60, by: 15).map {
+            HistorySample(kindLabel: "5-hour", percent: 40 + Double($0) / 3,
+                          at: now.addingTimeInterval(Double($0 - 60) * 60))
+        }
+        let history = InMemoryHistoryStore(samples: samples, now: { self.now })
+        let usage = Usage(limits: [
+            UsageLimit(kind: .session, percent: 60,
+                       resetsAt: now.addingTimeInterval(10 * 3600), isActive: true)
+        ], fetchedAt: now)
+        let vm = MeterViewModel(client: StubClient(.success(usage)),
+                                history: history, now: { self.now })
+        await vm.refresh()
+        XCTAssertNotNil(vm.rows.first?.burn)
+        XCTAssertGreaterThan(vm.rows.first?.series.count ?? 0, 1)
+    }
+
+    func testBurnAndSeriesIgnorePriorWindowSamples() async {
+        // A steep rising trend, but all in the *previous* window (different reset).
+        let oldReset = now.addingTimeInterval(-60)
+        let priorWindow = stride(from: 0, through: 60, by: 15).map {
+            HistorySample(kindLabel: "5-hour", percent: 40 + Double($0),
+                          at: now.addingTimeInterval(Double($0 - 120) * 60),
+                          windowResetsAt: oldReset)
+        }
+        let history = InMemoryHistoryStore(samples: priorWindow, now: { self.now })
+        // Fresh window: reset moved forward, usage dropped to ~2%.
+        let usage = Usage(limits: [
+            UsageLimit(kind: .session, percent: 2,
+                       resetsAt: now.addingTimeInterval(5 * 3600), isActive: true)
+        ], fetchedAt: now)
+        let vm = MeterViewModel(client: StubClient(.success(usage)),
+                                history: history, now: { self.now })
+        await vm.refresh()
+        // Only the single new-window sample counts: no false projection, and the
+        // sparkline reflects the fresh window, not the old steep climb.
+        XCTAssertNil(vm.rows.first?.burn)
+        XCTAssertEqual(vm.rows.first?.series, [2])
+    }
+
+    func testSpendExposedFromState() async {
+        let usage = Usage(limits: [], spend: Spend(amount: 3.2, limit: 10, currency: "USD"), fetchedAt: now)
+        let vm = MeterViewModel(client: StubClient(.success(usage)), now: { self.now })
+        XCTAssertNil(vm.spend)
+        await vm.refresh()
+        XCTAssertEqual(vm.spend?.amount, 3.2)
+    }
+
+    func testDefaultShowRemainingSetsInitialDisplayMode() {
+        let vm = MeterViewModel(client: StubClient(.success(sampleUsage())),
+                                preferences: Preferences(defaultShowRemaining: true),
+                                now: { self.now })
+        XCTAssertEqual(vm.displayMode, .remaining)
+    }
+
+    func testNotificationsDispatchedToSinkOnThresholdCross() async {
+        let sink = SpyNotifier()
+        let stub = StubClient(.success(sessionUsage(50)))
+        let vm = MeterViewModel(client: stub,
+                                notifier: ThresholdNotifier(),
+                                notificationSink: sink,
+                                now: { self.now })
+        await vm.refresh()                    // baseline at 50%, no events
+        XCTAssertTrue(sink.events.isEmpty)
+        stub.result = .success(sessionUsage(82))
+        await vm.refresh()                    // crosses 80%
+        XCTAssertEqual(sink.events.count, 1)
+        XCTAssertTrue(sink.events[0].id.contains("80"))
+    }
+
+    private func sessionUsage(_ percent: Double) -> Usage {
+        Usage(limits: [UsageLimit(kind: .session, percent: percent,
+                                  resetsAt: now.addingTimeInterval(3600), isActive: true)],
+              fetchedAt: now)
     }
 }
