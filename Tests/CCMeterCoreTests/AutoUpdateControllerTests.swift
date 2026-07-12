@@ -38,6 +38,21 @@ final class AutoUpdateControllerTests: XCTestCase {
         XCTAssertEqual(fixture.scheduler.tokens.map(\.cancelCount), [1, 1])
     }
 
+    func testTimerScheduleTokenInvalidatesTimerWhenReleased() {
+        let fired = expectation(description: "released timer must not fire")
+        fired.isInverted = true
+        var token: UpdateScheduleToken? = TimerUpdateScheduler().schedule(
+            after: 0.01,
+            repeating: nil,
+            action: { fired.fulfill() }
+        )
+
+        XCTAssertNotNil(token)
+        token = nil
+
+        wait(for: [fired], timeout: 0.05)
+    }
+
     func testReenablingReschedulesAfterCancellation() {
         let fixture = makeController(outcome: .upToDate)
         fixture.controller.start(enabled: true)
@@ -76,6 +91,60 @@ final class AutoUpdateControllerTests: XCTestCase {
         XCTAssertEqual(fixture.attemptStore.lastAttempt, now)
         updater.resume(returning: .upToDate)
         await check.value
+    }
+
+    func testSuspendingUpdaterDoesNotLoseResumeBeforeOutcomeWaitIsRegistered() async {
+        let reachedRegistrationGap = DispatchSemaphore(value: 0)
+        let allowRegistration = DispatchSemaphore(value: 0)
+        let updater = SuspendingUpdater(beforeOutcomeContinuationRegistration: {
+            reachedRegistrationGap.signal()
+            allowRegistration.wait()
+        })
+        let completed = expectation(description: "updater completed from the first resume")
+        let install = Task.detached {
+            let outcome = await updater.installIfAvailable()
+            completed.fulfill()
+            return outcome
+        }
+
+        XCTAssertEqual(reachedRegistrationGap.wait(timeout: .now() + 1), .success)
+        await updater.waitUntilCalled()
+        updater.resume(returning: .upToDate)
+        allowRegistration.signal()
+
+        await fulfillment(of: [completed], timeout: 0.2)
+        updater.resume(returning: .upToDate) // Cleanup for the pre-fix failure path.
+        let outcome = await install.value
+        XCTAssertEqual(outcome, .upToDate)
+    }
+
+    func testSuspendingUpdaterRegistersWaiterAtomicallyWithCallCheck() async {
+        let reachedWaiterRegistration = DispatchSemaphore(value: 0)
+        let allowWaiterRegistration = DispatchSemaphore(value: 0)
+        let installAttempted = DispatchSemaphore(value: 0)
+        let updater = SuspendingUpdater(
+            onInstallAttempt: { installAttempted.signal() },
+            beforeWaiterRegistration: {
+                reachedWaiterRegistration.signal()
+                allowWaiterRegistration.wait()
+            }
+        )
+        let waiterCompleted = expectation(description: "waiter observed the first install call")
+        let waiter = Task.detached {
+            await updater.waitUntilCalled()
+            waiterCompleted.fulfill()
+        }
+
+        XCTAssertEqual(reachedWaiterRegistration.wait(timeout: .now() + 1), .success)
+        let install = Task.detached { await updater.installIfAvailable() }
+        XCTAssertEqual(installAttempted.wait(timeout: .now() + 1), .success)
+        allowWaiterRegistration.signal()
+
+        await fulfillment(of: [waiterCompleted], timeout: 0.2)
+        updater.resume(returning: .upToDate)
+        await waiter.value
+        let outcome = await install.value
+        XCTAssertEqual(outcome, .upToDate)
     }
 
     func testCompletedAttemptIsNotRetriedBeforeTwentyFourHours() async {
@@ -237,25 +306,84 @@ private final class StubUpdater: TestUpdater {
 
 private final class SuspendingUpdater: TestUpdater {
     let isSupported = true
-    private(set) var callCount = 0
+    private let lock = NSLock()
+    private var storedCallCount = 0
     private var callWaiters: [CheckedContinuation<Void, Never>] = []
     private var outcomeContinuation: CheckedContinuation<AutomaticUpdateOutcome, Never>?
+    private var pendingOutcome: AutomaticUpdateOutcome?
+
+    private let onInstallAttempt: () -> Void
+    private let beforeWaiterRegistration: () -> Void
+    private let beforeOutcomeContinuationRegistration: () -> Void
+
+    init(
+        onInstallAttempt: @escaping () -> Void = {},
+        beforeWaiterRegistration: @escaping () -> Void = {},
+        beforeOutcomeContinuationRegistration: @escaping () -> Void = {}
+    ) {
+        self.onInstallAttempt = onInstallAttempt
+        self.beforeWaiterRegistration = beforeWaiterRegistration
+        self.beforeOutcomeContinuationRegistration = beforeOutcomeContinuationRegistration
+    }
+
+    var callCount: Int {
+        lock.withLock { storedCallCount }
+    }
 
     func installIfAvailable() async -> AutomaticUpdateOutcome {
-        callCount += 1
-        callWaiters.forEach { $0.resume() }
-        callWaiters.removeAll()
-        return await withCheckedContinuation { outcomeContinuation = $0 }
+        onInstallAttempt()
+        let waiters = lock.withLock {
+            storedCallCount += 1
+            let waiters = callWaiters
+            callWaiters.removeAll()
+            return waiters
+        }
+        waiters.forEach { $0.resume() }
+
+        beforeOutcomeContinuationRegistration()
+        return await withCheckedContinuation { continuation in
+            let outcome = lock.withLock {
+                let outcome = pendingOutcome
+                pendingOutcome = nil
+                if outcome == nil {
+                    outcomeContinuation = continuation
+                }
+                return outcome
+            }
+
+            if let outcome {
+                continuation.resume(returning: outcome)
+            }
+        }
     }
 
     func waitUntilCalled() async {
-        if callCount > 0 { return }
-        await withCheckedContinuation { callWaiters.append($0) }
+        await withCheckedContinuation { continuation in
+            let wasAlreadyCalled = lock.withLock {
+                let wasAlreadyCalled = storedCallCount > 0
+                if !wasAlreadyCalled {
+                    beforeWaiterRegistration()
+                    callWaiters.append(continuation)
+                }
+                return wasAlreadyCalled
+            }
+
+            if wasAlreadyCalled {
+                continuation.resume()
+            }
+        }
     }
 
     func resume(returning outcome: AutomaticUpdateOutcome) {
-        outcomeContinuation?.resume(returning: outcome)
-        outcomeContinuation = nil
+        let continuation = lock.withLock {
+            let continuation = outcomeContinuation
+            outcomeContinuation = nil
+            if continuation == nil {
+                pendingOutcome = outcome
+            }
+            return continuation
+        }
+        continuation?.resume(returning: outcome)
     }
 }
 

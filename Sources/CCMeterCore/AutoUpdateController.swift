@@ -67,6 +67,10 @@ private final class TimerUpdateScheduleToken: UpdateScheduleToken {
         self.timer = timer
     }
 
+    deinit {
+        timer.invalidate()
+    }
+
     func cancel() {
         timer.invalidate()
     }
