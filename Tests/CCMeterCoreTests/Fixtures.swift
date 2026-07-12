@@ -33,4 +33,32 @@ enum Fixtures {
       "spend": { "used_cents": 1234, "limit_cents": 5000, "currency": "USD" }
     }
     """.data(using: .utf8)!
+
+    static let codexMultiLimitJSON = """
+    {
+      "id": 2,
+      "result": {
+        "rateLimits": {
+          "limitId": "codex",
+          "limitName": null,
+          "primary": { "usedPercent": 99, "windowDurationMins": 300, "resetsAt": 1783900000 },
+          "secondary": null
+        },
+        "rateLimitsByLimitId": {
+          "codex": {
+            "limitId": "codex",
+            "limitName": null,
+            "primary": { "usedPercent": 25, "windowDurationMins": 300, "resetsAt": 1783900000 },
+            "secondary": { "usedPercent": 40, "windowDurationMins": 10080, "resetsAt": 1784400000 }
+          },
+          "codex_spark": {
+            "limitId": "codex_spark",
+            "limitName": "GPT-5.3-Codex-Spark",
+            "primary": { "usedPercent": 10, "windowDurationMins": 10080, "resetsAt": 1784400100 },
+            "secondary": null
+          }
+        }
+      }
+    }
+    """.data(using: .utf8)!
 }
