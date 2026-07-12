@@ -34,7 +34,7 @@ bootstrap upgrade before the app can update itself:
 
 Starting with v0.4.3, cc-meter checks once per day by default and upgrades only
 the `raheelkazi/tap/cc-meter` formula when a new version is available. You can
-turn this off with **Settings… > Automatically install updates**.
+turn this off with **Settings… > Automatically install cc-meter updates**.
 
 Automatic updates run only when cc-meter was launched as the
 `homebrew.mxcl.cc-meter` Homebrew service. Development runs such as

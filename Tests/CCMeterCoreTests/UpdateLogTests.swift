@@ -33,18 +33,25 @@ final class UpdateLogTests: XCTestCase {
             at: Date(timeIntervalSince1970: 0)
         )
         let marker = "newest-entry-marker"
+        let failurePrefix = "exit 42: "
 
         logger.record(
             UpdateFailure(
                 stage: .upgrade,
-                detail: String(repeating: "b", count: FileUpdateLogger.maxBytes) + marker
+                detail: failurePrefix
+                    + String(repeating: "b", count: FileUpdateLogger.maxBytes)
+                    + marker
             ),
             at: Date(timeIntervalSince1970: 60)
         )
 
         let data = try Data(contentsOf: url)
+        let contents = String(decoding: data, as: UTF8.self)
         XCTAssertLessThanOrEqual(data.count, FileUpdateLogger.maxBytes)
-        XCTAssertTrue(String(decoding: data, as: UTF8.self).contains(marker))
+        XCTAssertTrue(contents.hasPrefix(
+            "1970-01-01T00:01:00Z stage=upgrade detail=\(failurePrefix)"
+        ))
+        XCTAssertTrue(contents.contains(marker))
     }
 
     func testLoggerSwallowsFilesystemFailures() throws {

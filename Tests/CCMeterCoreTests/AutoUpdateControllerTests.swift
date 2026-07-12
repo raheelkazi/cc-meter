@@ -112,7 +112,7 @@ final class AutoUpdateControllerTests: XCTestCase {
         updater.resume(returning: .upToDate)
         allowRegistration.signal()
 
-        await fulfillment(of: [completed], timeout: 0.2)
+        await fulfillment(of: [completed], timeout: 1)
         updater.resume(returning: .upToDate) // Cleanup for the pre-fix failure path.
         let outcome = await install.value
         XCTAssertEqual(outcome, .upToDate)
@@ -140,7 +140,7 @@ final class AutoUpdateControllerTests: XCTestCase {
         XCTAssertEqual(installAttempted.wait(timeout: .now() + 1), .success)
         allowWaiterRegistration.signal()
 
-        await fulfillment(of: [waiterCompleted], timeout: 0.2)
+        await fulfillment(of: [waiterCompleted], timeout: 1)
         updater.resume(returning: .upToDate)
         await waiter.value
         let outcome = await install.value

@@ -31,6 +31,8 @@ private final class ProcessSession {
     private let timeout: TimeInterval
     private let maxOutputBytes: Int
     private let lock = NSLock()
+    private let stdoutReadLock = NSLock()
+    private let stderrReadLock = NSLock()
 
     private var output = Data()
     private var completion: Completion?
@@ -53,17 +55,15 @@ private final class ProcessSession {
 
     func start(completion: @escaping Completion) {
         stdout.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            self?.consume(handle.availableData)
+            guard let self else { return }
+            self.readAvailableData(from: handle, synchronizedBy: self.stdoutReadLock)
         }
         stderr.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            self?.consume(handle.availableData)
+            guard let self else { return }
+            self.readAvailableData(from: handle, synchronizedBy: self.stderrReadLock)
         }
         process.terminationHandler = { [weak self] process in
-            guard let self else { return }
-            self.finish(.success(UpdateCommandResult(
-                status: process.terminationStatus,
-                output: self.capturedText()
-            )))
+            self?.finishAfterTermination(status: process.terminationStatus)
         }
 
         let timeoutWorkItem = DispatchWorkItem { [weak self] in
@@ -87,6 +87,27 @@ private final class ProcessSession {
             deadline: .now() + max(0, timeout),
             execute: timeoutWorkItem
         )
+    }
+
+    private func readAvailableData(from handle: FileHandle, synchronizedBy readLock: NSLock) {
+        readLock.withLock {
+            consume(handle.availableData)
+        }
+    }
+
+    private func finishAfterTermination(status: Int32) {
+        stdout.fileHandleForReading.readabilityHandler = nil
+        stderr.fileHandleForReading.readabilityHandler = nil
+        stdoutReadLock.withLock {
+            consume(stdout.fileHandleForReading.readDataToEndOfFile())
+        }
+        stderrReadLock.withLock {
+            consume(stderr.fileHandleForReading.readDataToEndOfFile())
+        }
+        finish(.success(UpdateCommandResult(
+            status: status,
+            output: capturedText()
+        )))
     }
 
     private func consume(_ data: Data) {

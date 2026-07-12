@@ -70,6 +70,37 @@ final class UpdateCommandProcessTests: XCTestCase {
         XCTAssertFalse(result.output.isEmpty)
     }
 
+    func testRunnerRepeatedlyCapturesTrailingOutputFromShortLivedProcesses() async throws {
+        let script = try makeScript("""
+        #!/bin/sh
+        printf '%s' "$1"
+        """)
+        let outputs = try await withThrowingTaskGroup(of: (Int, String).self) { group in
+            for index in 0..<100 {
+                group.addTask {
+                    let marker = "trailing-output-\(index)"
+                    let result = try await UpdateCommandProcess().run(
+                        executable: script,
+                        arguments: [marker],
+                        timeout: 2,
+                        maxOutputBytes: 1024
+                    )
+                    return (index, result.output)
+                }
+            }
+
+            var outputs: [Int: String] = [:]
+            for try await (index, output) in group {
+                outputs[index] = output
+            }
+            return outputs
+        }
+
+        for index in 0..<100 {
+            XCTAssertEqual(outputs[index], "trailing-output-\(index)", "iteration \(index)")
+        }
+    }
+
     func testRunnerReportsLaunchFailureForMissingExecutable() async {
         let missing = FileManager.default.temporaryDirectory
             .appendingPathComponent("cc-meter-missing-\(UUID().uuidString)")
