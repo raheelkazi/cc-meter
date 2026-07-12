@@ -41,8 +41,7 @@ public final class ThresholdNotifier {
         let thresholds = preferences.notificationThresholds.sorted()
 
         for limit in usage.limits {
-            let label = limit.kind.label
-            let key = "\(provider.rawValue)#\(label)"
+            let key = "\(provider.rawValue)#\(limit.kind.identity)"
             let isNewWindow = windowResetsAt[key] != limit.resetsAt
             if isNewWindow {
                 windowResetsAt[key] = limit.resetsAt
@@ -95,14 +94,14 @@ public final class ThresholdNotifier {
             title = "\(provider.displayName) · \(limit.kind.label) usage at \(pct)%"
             body = "Your \(provider.displayName) \(limit.kind.label) window is \(Int(limit.percent.rounded()))% used. \(countdownText(to: limit.resetsAt, now: now))."
         }
-        return NotificationEvent(id: "\(provider.rawValue)#\(limit.kind.label)#\(pct)",
+        return NotificationEvent(id: "\(provider.rawValue)#\(limit.kind.identity)#\(pct)",
                                  title: title, body: body)
     }
 
     private static func headsUpEvent(provider: UsageProvider,
                                      limit: UsageLimit,
                                      now: Date) -> NotificationEvent {
-        NotificationEvent(id: "\(provider.rawValue)#\(limit.kind.label)#reset-headsup",
+        NotificationEvent(id: "\(provider.rawValue)#\(limit.kind.identity)#reset-headsup",
                           title: "\(provider.displayName) · \(limit.kind.label) resets soon",
                           body: "Your \(provider.displayName) \(limit.kind.label) window \(countdownText(to: limit.resetsAt, now: now)).")
     }

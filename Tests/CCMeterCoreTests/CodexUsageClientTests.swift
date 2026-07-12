@@ -124,6 +124,25 @@ final class CodexUsageClientTests: XCTestCase {
 
         XCTAssertEqual(CodexExecutableResolver(candidates: [missing, executable]).resolve(), executable)
     }
+
+    func testProcessTransportHandlesExecutableThatExitsImmediately() async {
+        let transport = CodexAppServerProcess()
+        do {
+            _ = try await transport.exchange(
+                executable: URL(fileURLWithPath: "/usr/bin/false"),
+                input: Data(repeating: 0x78, count: 64 * 1024),
+                responseID: 2,
+                timeout: 2
+            )
+            XCTFail("expected the exited process to fail")
+        } catch let error as CodexTransportError {
+            guard case .prematureEOF = error else {
+                return XCTFail("expected premature EOF, got \(error)")
+            }
+        } catch {
+            XCTFail("unexpected error: \(error)")
+        }
+    }
 }
 
 private extension Result where Failure == UsageError {

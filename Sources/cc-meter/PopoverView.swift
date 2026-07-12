@@ -18,12 +18,17 @@ struct PopoverView: View {
                 .help("Toggle used vs remaining")
             }
 
-            providerSection(provider: .claude, viewModel: dashboard.claude)
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 12) {
+                    providerSection(provider: .claude, viewModel: dashboard.claude)
 
-            if dashboard.showsCodex {
-                Divider()
-                providerSection(provider: .codex, viewModel: dashboard.codex)
+                    if dashboard.showsCodex {
+                        Divider()
+                        providerSection(provider: .codex, viewModel: dashboard.codex)
+                    }
+                }
             }
+            .frame(maxHeight: 470)
 
             Divider()
             HStack {

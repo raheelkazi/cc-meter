@@ -57,6 +57,7 @@ public struct CodexRateLimitsResponse: Decodable {
 
         struct Candidate {
             let groupID: String
+            let identity: String
             let baseLabel: String
             let window: Window
         }
@@ -64,11 +65,16 @@ public struct CodexRateLimitsResponse: Decodable {
         var candidates: [Candidate] = []
         for (dictionaryID, group) in result.orderedGroups {
             let groupID = group.limitId ?? dictionaryID
-            for window in [group.primary, group.secondary].compactMap({ $0 }) {
+            for (role, optionalWindow) in [("primary", group.primary),
+                                           ("secondary", group.secondary)] {
+                guard let window = optionalWindow else { continue }
                 let duration = Self.durationLabel(minutes: window.windowDurationMins)
                 let name = group.limitName?.trimmingCharacters(in: .whitespacesAndNewlines)
                 let label = name.flatMap { $0.isEmpty ? nil : "\(duration) (\($0))" } ?? duration
-                candidates.append(Candidate(groupID: groupID, baseLabel: label, window: window))
+                candidates.append(Candidate(groupID: groupID,
+                                            identity: "codex:\(groupID):\(role)",
+                                            baseLabel: label,
+                                            window: window))
             }
         }
 
@@ -78,7 +84,8 @@ public struct CodexRateLimitsResponse: Decodable {
             let label = duplicate
                 ? "\(candidate.baseLabel) [\(candidate.groupID)]"
                 : candidate.baseLabel
-            return UsageLimit(kind: .named(label: label,
+            return UsageLimit(kind: .named(id: candidate.identity,
+                                           label: label,
                                            isSession: candidate.window.windowDurationMins == 300),
                               percent: candidate.window.usedPercent,
                               resetsAt: Date(timeIntervalSince1970: candidate.window.resetsAt),

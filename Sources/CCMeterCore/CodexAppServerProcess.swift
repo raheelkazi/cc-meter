@@ -1,11 +1,12 @@
 import Foundation
-import CCMeterCore
 
-final class CodexAppServerProcess: CodexAppServerTransport {
-    func exchange(executable: URL,
-                  input: Data,
-                  responseID: Int,
-                  timeout: TimeInterval) async throws -> Data {
+public final class CodexAppServerProcess: CodexAppServerTransport {
+    public init() {}
+
+    public func exchange(executable: URL,
+                         input: Data,
+                         responseID: Int,
+                         timeout: TimeInterval) async throws -> Data {
         try await withCheckedThrowingContinuation { continuation in
             let session = CodexProcessSession(executable: executable,
                                               input: input,
@@ -78,7 +79,24 @@ private final class CodexProcessSession {
         DispatchQueue.global(qos: .utility)
             .asyncAfter(deadline: .now() + timeout, execute: timeoutWorkItem)
 
-        stdin.fileHandleForWriting.write(input)
+        writeInputIfRunning()
+    }
+
+    private func writeInputIfRunning() {
+        lock.lock()
+        guard !finished else {
+            lock.unlock()
+            return
+        }
+        do {
+            try stdin.fileHandleForWriting.write(contentsOf: input)
+            lock.unlock()
+        } catch {
+            lock.unlock()
+            finish(.failure(CodexTransportError.prematureEOF(
+                "stdin write failed: \(error.localizedDescription)"
+            )))
+        }
     }
 
     private func consumeStdout(_ data: Data) {

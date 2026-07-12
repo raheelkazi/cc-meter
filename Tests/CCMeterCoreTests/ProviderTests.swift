@@ -8,8 +8,10 @@ final class ProviderTests: XCTestCase {
     }
 
     func testNamedWindowPreservesLabelAndSessionMeaning() {
-        let kind = WindowKind.named(label: "5-hour", isSession: true)
+        let kind = WindowKind.named(id: "codex:default:primary",
+                                    label: "5-hour", isSession: true)
         XCTAssertEqual(kind.label, "5-hour")
+        XCTAssertEqual(kind.identity, "codex:default:primary")
         XCTAssertTrue(kind.isSessionWindow)
         XCTAssertFalse(WindowKind.weeklyAll.isSessionWindow)
     }

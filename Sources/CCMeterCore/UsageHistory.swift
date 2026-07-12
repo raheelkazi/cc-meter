@@ -109,7 +109,7 @@ public final class FileHistoryStore: HistoryStoring {
         let clock = now()
         for limit in usage.limits {
             samples.append(HistorySample(provider: provider,
-                                         kindLabel: limit.kind.label, percent: limit.percent,
+                                         kindLabel: limit.kind.identity, percent: limit.percent,
                                          at: clock, windowResetsAt: limit.resetsAt))
         }
         samples = HistoryMath.pruned(samples, now: clock, retention: retention)
@@ -152,7 +152,7 @@ public final class InMemoryHistoryStore: HistoryStoring {
         let clock = now()
         for limit in usage.limits {
             samples.append(HistorySample(provider: provider,
-                                         kindLabel: limit.kind.label, percent: limit.percent,
+                                         kindLabel: limit.kind.identity, percent: limit.percent,
                                          at: clock, windowResetsAt: limit.resetsAt))
         }
         samples = HistoryMath.pruned(samples, now: clock, retention: retention)

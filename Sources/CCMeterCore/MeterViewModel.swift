@@ -265,7 +265,7 @@ public final class MeterViewModel: ObservableObject {
         guard let top = mostConstrainedLimit() else { return nil }
         let clock = now()
         let used = summarize(top)
-        let samples = currentWindowSamples(for: top, label: top.kind.label)
+        let samples = currentWindowSamples(for: top, identity: top.kind.identity)
         let projection = burnProjection(samples: samples.filter { $0.at >= clock.addingTimeInterval(-burnWindow) },
                                         currentPercent: top.percent,
                                         resetsAt: top.resetsAt,
@@ -329,7 +329,7 @@ public final class MeterViewModel: ObservableObject {
             let used = summarize(limit)
             let displayPercent = mode == .used ? used.percent : (100 - used.percent)
             let label = limit.kind.label
-            let windowSamples = currentWindowSamples(for: limit, label: label)
+            let windowSamples = currentWindowSamples(for: limit, identity: limit.kind.identity)
             let burnSamples = windowSamples.filter { $0.at >= clock.addingTimeInterval(-burnWindow) }
             let projection = burnProjection(samples: burnSamples,
                                             currentPercent: limit.percent,
@@ -337,7 +337,7 @@ public final class MeterViewModel: ObservableObject {
                                             now: clock)
 
             // Index-prefixed id stays unique even if two windows share a label.
-            return MeterRow(id: "\(index)-\(label)",
+            return MeterRow(id: "\(index)-\(limit.kind.identity)",
                             label: label,
                             isPromoted: index == promotedIndex,
                             displayPercent: displayPercent,
@@ -355,13 +355,13 @@ public final class MeterViewModel: ObservableObject {
         }
     }
 
-    private func currentWindowSamples(for limit: UsageLimit, label: String) -> [HistorySample] {
+    private func currentWindowSamples(for limit: UsageLimit, identity: String) -> [HistorySample] {
         // Only consider samples from the current window: after a reset the old
         // window's percentages must not pollute the burn rate or the trend.
         // Match by tolerance rather than exact equality because `resets_at`
         // jitters sub-second between fetches. (Legacy samples without a
         // recorded window are treated as matching.)
-        (history?.recent(provider: provider, kindLabel: label, since: .distantPast) ?? [])
+        (history?.recent(provider: provider, kindLabel: identity, since: .distantPast) ?? [])
             .filter { sample in
                 guard let windowResetsAt = sample.windowResetsAt else { return true }
                 return abs(windowResetsAt.timeIntervalSince(limit.resetsAt)) < windowMatchTolerance

@@ -57,4 +57,27 @@ final class CodexUsageResponseTests: XCTestCase {
                            CodexProtocolError(code: -32601, message: "Method not found"))
         }
     }
+
+    func testIdentityStaysStableWhenDuplicateMembershipChanges() throws {
+        let bothData = """
+        {"id":2,"result":{"rateLimitsByLimitId":{
+          "alpha":{"limitId":"alpha","primary":{"usedPercent":1,"windowDurationMins":60,"resetsAt":2000000}},
+          "beta":{"limitId":"beta","primary":{"usedPercent":2,"windowDurationMins":60,"resetsAt":2000000}}
+        }}}
+        """.data(using: .utf8)!
+        let alphaOnlyData = """
+        {"id":2,"result":{"rateLimitsByLimitId":{
+          "alpha":{"limitId":"alpha","primary":{"usedPercent":3,"windowDurationMins":60,"resetsAt":2000000}}
+        }}}
+        """.data(using: .utf8)!
+        let both = try JSONDecoder().decode(CodexRateLimitsResponse.self, from: bothData)
+        let alphaOnly = try JSONDecoder().decode(CodexRateLimitsResponse.self, from: alphaOnlyData)
+
+        let bothUsage = try both.toUsage(now: now)
+        let alphaOnlyUsage = try alphaOnly.toUsage(now: now)
+        let firstIdentity = bothUsage.limits[0].kind.identity
+        let secondIdentity = alphaOnlyUsage.limits[0].kind.identity
+        XCTAssertEqual(firstIdentity, "codex:alpha:primary")
+        XCTAssertEqual(secondIdentity, firstIdentity)
+    }
 }
