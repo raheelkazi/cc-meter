@@ -69,6 +69,14 @@ struct SettingsView: View {
                            isOn: $prefs.historyEnabled)
                 }
 
+                card("Updates") {
+                    Toggle("Automatically install cc-meter updates",
+                           isOn: $prefs.automaticUpdatesEnabled)
+                    Text("Available for Homebrew service installations.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 card("Startup") {
                     Toggle("Launch cc-meter at login", isOn: $prefs.launchAtLogin)
                 }

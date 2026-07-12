@@ -13,6 +13,25 @@ final class PreferencesTests: XCTestCase {
         XCTAssertFalse(p.launchAtLogin)
     }
 
+    func testAutomaticUpdatesDefaultToEnabled() {
+        XCTAssertTrue(Preferences().automaticUpdatesEnabled)
+    }
+
+    func testLegacyPreferencesEnableAutomaticUpdates() throws {
+        let data = #"{"pollInterval":180,"notificationsEnabled":true}"#.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(Preferences.self, from: data)
+        XCTAssertTrue(decoded.automaticUpdatesEnabled)
+    }
+
+    func testAutomaticUpdatesRoundTrip() throws {
+        let original = Preferences(automaticUpdatesEnabled: false)
+        let decoded = try JSONDecoder().decode(
+            Preferences.self,
+            from: JSONEncoder().encode(original)
+        )
+        XCTAssertFalse(decoded.automaticUpdatesEnabled)
+    }
+
     func testNormalizeClampsInterval() {
         var p = Preferences()
         p.pollInterval = 1

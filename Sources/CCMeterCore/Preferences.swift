@@ -17,6 +17,8 @@ public struct Preferences: Codable, Equatable {
     public var historyEnabled: Bool
     /// Whether the app should relaunch at login (managed via a LaunchAgent).
     public var launchAtLogin: Bool
+    /// Whether Homebrew service installations should update automatically.
+    public var automaticUpdatesEnabled: Bool
 
     public static let minPollInterval: TimeInterval = 15
 
@@ -28,7 +30,8 @@ public struct Preferences: Codable, Equatable {
                 sessionResetHeadsUpMinutes: Int? = 10,
                 defaultShowRemaining: Bool = false,
                 historyEnabled: Bool = true,
-                launchAtLogin: Bool = false) {
+                launchAtLogin: Bool = false,
+                automaticUpdatesEnabled: Bool = true) {
         self.pollInterval = pollInterval
         self.notificationsEnabled = notificationsEnabled
         self.notificationThresholds = notificationThresholds
@@ -36,11 +39,13 @@ public struct Preferences: Codable, Equatable {
         self.defaultShowRemaining = defaultShowRemaining
         self.historyEnabled = historyEnabled
         self.launchAtLogin = launchAtLogin
+        self.automaticUpdatesEnabled = automaticUpdatesEnabled
     }
 
     private enum CodingKeys: String, CodingKey {
         case pollInterval, notificationsEnabled, notificationThresholds
         case sessionResetHeadsUpMinutes, defaultShowRemaining, historyEnabled, launchAtLogin
+        case automaticUpdatesEnabled
     }
 
     /// Decodes leniently: any field absent from an older stored blob falls back
@@ -55,6 +60,10 @@ public struct Preferences: Codable, Equatable {
         defaultShowRemaining = try c.decodeIfPresent(Bool.self, forKey: .defaultShowRemaining) ?? d.defaultShowRemaining
         historyEnabled = try c.decodeIfPresent(Bool.self, forKey: .historyEnabled) ?? d.historyEnabled
         launchAtLogin = try c.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? d.launchAtLogin
+        automaticUpdatesEnabled = try c.decodeIfPresent(
+            Bool.self,
+            forKey: .automaticUpdatesEnabled
+        ) ?? d.automaticUpdatesEnabled
     }
 
     /// Returns a copy with out-of-range values coerced back into supported bounds.
