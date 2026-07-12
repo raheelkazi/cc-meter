@@ -25,6 +25,9 @@ In the `raheelkazi/homebrew-tap` repo, edit `Formula/cc-meter.rb`:
 - Set `url` to `.../archive/refs/tags/vX.Y.Z.tar.gz`.
 - Set `sha256` to the value from above.
 
-Commit and push. Users get it with `brew update && brew upgrade cc-meter`.
+Commit and push. Pushing the updated tap formula is the release step that
+automatic clients observe on their next due check. Clients older than v0.4.3,
+clients with automatic updates disabled, and clients not running as the
+Homebrew service still get it with `brew update && brew upgrade cc-meter`.
 
 (Alternatively `brew bump-formula-pr` automates the url/sha256 bump.)

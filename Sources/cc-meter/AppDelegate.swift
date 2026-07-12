@@ -1,5 +1,6 @@
 import AppKit
 import CCMeterCore
+import Darwin
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -7,6 +8,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsWindow: SettingsWindowController?
     private let preferencesStore = UserDefaultsPreferencesStore()
     private var dashboard: DashboardViewModel?
+    private var autoUpdateController: AutomaticUpdateControlling?
+
+    static func makeAutoUpdateController(environment: [String: String]) -> AutoUpdateController {
+        let updater = HomebrewUpdater(
+            resolver: HomebrewExecutableResolver(),
+            runner: UpdateCommandProcess(),
+            environment: environment
+        )
+        return AutoUpdateController(
+            updater: updater,
+            logger: FileUpdateLogger(),
+            notifier: OsascriptNotifier(),
+            scheduler: TimerUpdateScheduler(),
+            attemptStore: UserDefaultsUpdateAttemptStore(),
+            exitHandler: { Darwin.exit($0) }
+        )
+    }
+
+    static func startAutomaticUpdates(
+        _ controller: AutomaticUpdateControlling,
+        preferences: Preferences
+    ) {
+        controller.start(enabled: preferences.automaticUpdatesEnabled)
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         DebugLog.log("didFinishLaunching enter")
@@ -80,6 +105,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.install()
         self.controller = controller
 
+        let autoUpdateController = Self.makeAutoUpdateController(
+            environment: ProcessInfo.processInfo.environment
+        )
+        self.autoUpdateController = autoUpdateController
+        Self.startAutomaticUpdates(autoUpdateController, preferences: preferences)
+
         dashboard.start()
         DebugLog.log("didFinishLaunching complete; entering run loop")
     }
@@ -88,6 +119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let previous = preferencesStore.load()
         preferencesStore.save(preferences)
         dashboard?.apply(preferences)
+        autoUpdateController?.apply(enabled: preferences.automaticUpdatesEnabled)
         if preferences.launchAtLogin != previous.launchAtLogin {
             LoginItem.setEnabled(preferences.launchAtLogin)
         }

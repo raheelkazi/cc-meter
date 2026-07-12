@@ -24,7 +24,24 @@ Manage it with:
     brew services restart cc-meter   # after an upgrade
     brew services stop cc-meter      # stop and disable
 
-Upgrade later with `brew upgrade cc-meter`.
+## Automatic updates
+
+Automatic updates arrive with v0.4.3. Existing installations need one manual
+bootstrap upgrade before the app can update itself:
+
+    brew update
+    brew upgrade cc-meter
+
+Starting with v0.4.3, cc-meter checks once per day by default and upgrades only
+the `raheelkazi/tap/cc-meter` formula when a new version is available. You can
+turn this off with **Settings… > Automatically install updates**.
+
+Automatic updates run only when cc-meter was launched as the
+`homebrew.mxcl.cc-meter` Homebrew service. Development runs such as
+`swift run cc-meter` never invoke Homebrew. If an update fails, diagnostics are
+written to `~/Library/Logs/cc-meter/update.log`. To recover manually, run:
+
+    brew upgrade cc-meter
 
 ## Requirements
 
@@ -65,7 +82,7 @@ Usage refreshes every minute by default (configurable in Settings).
   using the stored refresh token and retries, falling back to a re-authenticate
   message only if refresh isn't possible.
 - **Preferences window**: poll interval, notification thresholds, default
-  used/remaining view, history on/off, and launch-at-login.
+  used/remaining view, history on/off, automatic updates, and launch-at-login.
 
 ## How it works
 
