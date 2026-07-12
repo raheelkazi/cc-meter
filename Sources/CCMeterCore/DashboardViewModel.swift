@@ -1,6 +1,18 @@
 import Foundation
 import Combine
 
+public struct ProviderCompactSummary: Equatable {
+    public let provider: UsageProvider
+    public let percent: Int
+    public let color: MeterColor
+
+    public init(provider: UsageProvider, percent: Int, color: MeterColor) {
+        self.provider = provider
+        self.percent = percent
+        self.color = color
+    }
+}
+
 @MainActor
 public final class DashboardViewModel: ObservableObject {
     public let claude: MeterViewModel
@@ -26,10 +38,25 @@ public final class DashboardViewModel: ObservableObject {
 
     public var displayMode: DisplayMode { claude.displayMode }
 
+    public var compactProviders: [ProviderCompactSummary] {
+        var summaries: [ProviderCompactSummary] = []
+        if let compact = claude.compact {
+            summaries.append(ProviderCompactSummary(provider: .claude,
+                                                    percent: compact.percent,
+                                                    color: compact.color))
+        }
+        if showsCodex, let compact = codex.compact {
+            summaries.append(ProviderCompactSummary(provider: .codex,
+                                                    percent: compact.percent,
+                                                    color: compact.color))
+        }
+        return summaries
+    }
+
     public var compact: (percent: Int, color: MeterColor)? {
-        [claude.compact, showsCodex ? codex.compact : nil]
-            .compactMap { $0 }
+        compactProviders
             .max { $0.percent < $1.percent }
+            .map { (percent: $0.percent, color: $0.color) }
     }
 
     public var isLoading: Bool {

@@ -82,6 +82,39 @@ final class DashboardViewModelTests: XCTestCase {
         XCTAssertEqual(dashboard.compact?.percent, 70)
     }
 
+    func testCompactProvidersExposeClaudeThenCodexWithIndependentValues() async {
+        let (dashboard, _, _) = makeDashboard(claude: .success(usage(20)),
+                                               codex: .success(usage(70)))
+        await dashboard.refresh()
+
+        XCTAssertEqual(dashboard.compactProviders, [
+            ProviderCompactSummary(provider: .claude, percent: 20, color: .green),
+            ProviderCompactSummary(provider: .codex, percent: 70, color: .amber)
+        ])
+    }
+
+    func testCompactProvidersOmitHiddenCodex() async {
+        let (dashboard, _, _) = makeDashboard(claude: .success(usage(20)),
+                                               codex: .failure(.unauthorized))
+        await dashboard.refresh()
+
+        XCTAssertEqual(dashboard.compactProviders, [
+            ProviderCompactSummary(provider: .claude, percent: 20, color: .green)
+        ])
+    }
+
+    func testCompactProvidersCanShowCodexAlone() async {
+        let (dashboard, _, _) = makeDashboard(claude: .failure(.unauthorized),
+                                               codex: .success(usage(55)))
+        await dashboard.refresh()
+
+        XCTAssertEqual(dashboard.compactProviders, [
+            ProviderCompactSummary(provider: .codex, percent: 55, color: .amber)
+        ])
+        XCTAssertEqual(dashboard.compact?.percent, 55)
+        XCTAssertFalse(dashboard.hasError)
+    }
+
     func testValidCodexCompactSurvivesClaudeError() async {
         let (dashboard, _, _) = makeDashboard(claude: .failure(.unauthorized),
                                                codex: .success(usage(55)))
