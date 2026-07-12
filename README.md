@@ -1,12 +1,14 @@
 # cc-meter
 
-A native macOS menu bar app that shows your Claude Code usage limits in real
-time: the 5-hour session window, the 7-day window, and any per-model weekly
-limits. Each is color-coded by how much of the limit is used, like a fuel gauge
-(green when plenty is left, amber past 50%, red past 90%), with a reset countdown.
+A native macOS menu bar app that shows your Claude Code and OpenAI Codex usage
+limits in real time. Each provider gets its own section with the quota windows
+and per-model limits it reports. Limits are color-coded like a fuel gauge (green
+when plenty is left, amber past 50%, red past 90%), with a reset countdown.
 
-It reads the OAuth token that the `claude` CLI stores in your macOS Keychain and
-calls Anthropic's usage endpoint. No token is ever displayed or stored elsewhere.
+cc-meter automatically detects signed-in providers. For Claude Code it reads the
+OAuth token stored by the `claude` CLI in your macOS Keychain. For Codex it uses
+Codex's local app-server protocol, leaving credential access and token refresh to
+Codex itself. No token is ever displayed or stored by cc-meter.
 
 ## Install with Homebrew
 
@@ -27,7 +29,9 @@ Upgrade later with `brew upgrade cc-meter`.
 ## Requirements
 
 - macOS 13 or later
-- The `claude` CLI, signed in (`claude` and complete the login once)
+- The `claude` CLI, signed in, for Claude Code usage
+- The Codex app or `codex` CLI, signed in, for Codex usage
+- At least one of those providers installed and signed in
 - Swift toolchain (Xcode or the Swift command line tools)
 
 ## Run
@@ -35,16 +39,21 @@ Upgrade later with `brew upgrade cc-meter`.
     swift run cc-meter
 
 The app runs as a menu bar accessory (no dock icon). Click the menu bar item for
-the full breakdown. Use the Used/Left button to switch between used and remaining
-views, Refresh to fetch immediately, Settings… to open preferences, and Quit to
-exit.
+the full breakdown. Claude Code and Codex appear in stacked sections when both
+are available. The menu-bar percentage comes from the most constrained visible
+provider. Use the Used/Left button to switch both sections between used and
+remaining views, Refresh to fetch both immediately, Settings… to open
+preferences, and Quit to exit.
 
 Usage refreshes every minute by default (configurable in Settings).
 
 ## Features
 
-- **Live meter** for the 5-hour session, 7-day, and per-model weekly windows,
-  color-coded green/amber/red with a reset countdown.
+- **Dual-provider live meter** for Claude Code and Codex quota windows, including
+  named or model-specific limits, color-coded green/amber/red with a reset
+  countdown.
+- **Automatic detection and isolation**: Codex stays hidden when it is absent or
+  signed out, and one provider's failure never blanks valid data from the other.
 - **Threshold notifications**: get a macOS notification when a limit crosses
   80% / 95% / 100% (configurable), plus an optional heads-up before the 5-hour
   window resets. Alerts are edge-triggered, so you get one per crossing and they
@@ -60,14 +69,18 @@ Usage refreshes every minute by default (configurable in Settings).
 
 ## How it works
 
-- Token: macOS Keychain, generic password, service `Claude Code-credentials`.
-- Endpoint: `GET https://api.anthropic.com/api/oauth/usage`.
+- Claude token: macOS Keychain, generic password, service
+  `Claude Code-credentials`.
+- Claude endpoint: `GET https://api.anthropic.com/api/oauth/usage`.
 - On an expired token the app attempts a silent OAuth refresh and writes the new
   token back to the Keychain. If refresh isn't possible it shows a
   re-authenticate message; run `claude` and the meter recovers on the next poll.
-- History is stored locally at
-  `~/Library/Application Support/cc-meter/history.json`, bounded to the last 7
-  days. Preferences are stored in `UserDefaults`.
+- Codex usage: a short-lived `codex app-server --stdio` process and the stable
+  `account/rateLimits/read` RPC. Codex owns credential storage, account selection,
+  and token refresh; cc-meter never reads or stores Codex OAuth tokens.
+- Provider caches and history are stored separately under
+  `~/Library/Application Support/cc-meter/`, bounded to the last 7 days.
+  Preferences are stored in `UserDefaults`.
 - Launch-at-login installs a per-user LaunchAgent
   (`~/Library/LaunchAgents/com.raheelkazi.cc-meter.plist`).
 - Notifications are delivered via `osascript` (macOS may ask you to allow
@@ -79,8 +92,9 @@ Usage refreshes every minute by default (configurable in Settings).
     swift build    # build
     swift run cc-meter
 
-The core logic (preferences, Keychain parse/write, token refresh, HTTP client,
-decoding, usage color, burn-rate, history, notification rules, and the view
-model) lives in the `CCMeterCore` library and is unit-tested with injected
-fakes. The `cc-meter` executable is thin AppKit/SwiftUI glue plus the platform
-adapters (Keychain/launchctl/osascript shell-outs).
+The core logic (preferences, provider identity, Keychain parse/write, token
+refresh, HTTP and Codex app-server clients, decoding, usage color, burn-rate,
+history, notification rules, and dashboard models) lives in the `CCMeterCore`
+library and is unit-tested with injected fakes. The `cc-meter` executable is thin
+AppKit/SwiftUI glue plus platform adapters for Keychain, Codex subprocesses,
+launchctl, and osascript.
