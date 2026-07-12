@@ -298,13 +298,70 @@ git commit -m "feat: format dual-provider menu title"
 ### Task 3: Render the presentation in the AppKit status item
 
 **Files:**
+- Modify: `Package.swift`
 - Modify: `Sources/cc-meter/MenuBarController.swift`
+- Create: `Tests/CCMeterAppTests/MenuBarControllerTests.swift`
 
 **Interfaces:**
 - Consumes: `MenuBarPresentation.make(summaries:isLoading:hasError:)` and `MeterColor.nsColor`.
 - Produces: an attributed native status title and matching `NSStatusBarButton.toolTip`.
 
-- [ ] **Step 1: Replace direct highest-provider title rendering**
+- [ ] **Step 1: Write a failing AppKit bridge test**
+
+Add a `CCMeterAppTests` target depending on `cc-meter` and `CCMeterCore`. Create `MenuBarControllerTests.swift` and assert that `titleString(for: MenuBarPresentation)` returns `Cl ● 62% · Cx ● 18%` with system orange on the first dot and system green on the second dot.
+
+Add to `Package.swift`:
+
+```swift
+.testTarget(
+    name: "CCMeterAppTests",
+    dependencies: ["cc-meter", "CCMeterCore"]
+)
+```
+
+Create `Tests/CCMeterAppTests/MenuBarControllerTests.swift`:
+
+```swift
+import AppKit
+import XCTest
+@testable import CCMeterCore
+@testable import cc_meter
+
+@MainActor
+final class MenuBarControllerTests: XCTestCase {
+    func testTitleStringAppliesEachProviderColor() {
+        let presentation = MenuBarPresentation.make(summaries: [
+            ProviderCompactSummary(provider: .claude, percent: 62, color: .amber),
+            ProviderCompactSummary(provider: .codex, percent: 18, color: .green)
+        ], isLoading: false, hasError: false)
+
+        let title = MenuBarController.titleString(for: presentation)
+        let string = title.string as NSString
+        let firstDot = string.range(of: "●")
+        let secondSearch = NSRange(location: NSMaxRange(firstDot),
+                                   length: string.length - NSMaxRange(firstDot))
+        let secondDot = string.range(of: "●", range: secondSearch)
+
+        XCTAssertEqual(title.string, "Cl ● 62% · Cx ● 18%")
+        XCTAssertEqual(title.attribute(.foregroundColor, at: firstDot.location,
+                                       effectiveRange: nil) as? NSColor,
+                       NSColor.systemOrange)
+        XCTAssertEqual(title.attribute(.foregroundColor, at: secondDot.location,
+                                       effectiveRange: nil) as? NSColor,
+                       NSColor.systemGreen)
+    }
+}
+```
+
+Run:
+
+```bash
+swift test --filter MenuBarControllerTests
+```
+
+Expected: compilation fails because `MenuBarController.titleString(for:)` still accepts `DashboardViewModel` instead of `MenuBarPresentation`.
+
+- [ ] **Step 2: Replace direct highest-provider title rendering**
 
 Change the dashboard observer so rendering occurs after the published values settle:
 
@@ -344,7 +401,17 @@ static func titleString(for presentation: MenuBarPresentation) -> NSAttributedSt
 }
 ```
 
-- [ ] **Step 2: Build the application**
+- [ ] **Step 3: Run the AppKit bridge test and verify GREEN**
+
+Run:
+
+```bash
+swift test --filter MenuBarControllerTests
+```
+
+Expected: the AppKit bridge test passes with both dot colors applied to the correct ranges.
+
+- [ ] **Step 4: Build the application**
 
 Run:
 
@@ -354,7 +421,7 @@ swift build
 
 Expected: build succeeds with no compiler errors.
 
-- [ ] **Step 3: Run the full test suite**
+- [ ] **Step 5: Run the full test suite**
 
 Run:
 
@@ -364,10 +431,10 @@ swift test
 
 Expected: all tests pass with zero failures.
 
-- [ ] **Step 4: Commit Task 3**
+- [ ] **Step 6: Commit Task 3**
 
 ```bash
-git add Sources/cc-meter/MenuBarController.swift
+git add Package.swift Sources/cc-meter/MenuBarController.swift Tests/CCMeterAppTests/MenuBarControllerTests.swift
 git commit -m "feat: show both providers in menu bar"
 ```
 

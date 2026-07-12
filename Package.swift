@@ -13,6 +13,10 @@ let package = Package(
         .testTarget(
             name: "CCMeterCoreTests",
             dependencies: ["CCMeterCore"]
+        ),
+        .testTarget(
+            name: "CCMeterAppTests",
+            dependencies: ["cc-meter", "CCMeterCore"]
         )
     ]
 )

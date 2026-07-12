@@ -33,28 +33,35 @@ final class MenuBarController {
         // Re-render the status title on any published change.
         dashboard.objectWillChange
             .receive(on: RunLoop.main)
-            .sink { [weak self] in self?.updateTitle() }
+            .sink { [weak self] in
+                DispatchQueue.main.async { [weak self] in self?.updateTitle() }
+            }
             .store(in: &cancellables)
 
         updateTitle()
     }
 
     private func updateTitle() {
-        statusItem.button?.attributedTitle = Self.titleString(for: dashboard)
+        guard let button = statusItem.button else { return }
+        let presentation = MenuBarPresentation.make(
+            summaries: dashboard.compactProviders,
+            isLoading: dashboard.isLoading,
+            hasError: dashboard.hasError
+        )
+        button.attributedTitle = Self.titleString(for: presentation)
+        button.toolTip = presentation.tooltip
     }
 
-    static func titleString(for dashboard: DashboardViewModel) -> NSAttributedString {
-        if let compact = dashboard.compact {
-            let result = NSMutableAttributedString(
-                string: "\u{25CF} ",
-                attributes: [.foregroundColor: compact.color.nsColor]
-            )
-            result.append(NSAttributedString(string: "\(compact.percent)%"))
-            return result
+    static func titleString(for presentation: MenuBarPresentation) -> NSAttributedString {
+        let result = NSMutableAttributedString(string: "")
+        for segment in presentation.segments {
+            var attributes: [NSAttributedString.Key: Any] = [:]
+            if let color = segment.color {
+                attributes[.foregroundColor] = color.nsColor
+            }
+            result.append(NSAttributedString(string: segment.text, attributes: attributes))
         }
-        if dashboard.isLoading { return NSAttributedString(string: "CC ...") }
-        if dashboard.hasError { return NSAttributedString(string: "CC !") }
-        return NSAttributedString(string: "CC")
+        return result
     }
 
     @objc private func togglePopover() {
