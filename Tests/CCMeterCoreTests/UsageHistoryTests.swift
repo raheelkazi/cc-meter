@@ -72,4 +72,11 @@ final class UsageHistoryTests: XCTestCase {
         let sample = try JSONDecoder().decode(HistorySample.self, from: data)
         XCTAssertEqual(sample.provider, .claude)
     }
+
+    func testProviderHistoryFilesUseDistinctFilenames() {
+        XCTAssertTrue(FileHistoryStore.defaultURL(provider: .claude).path
+            .hasSuffix("history.json"))
+        XCTAssertTrue(FileHistoryStore.defaultURL(provider: .codex).path
+            .hasSuffix("history-codex.json"))
+    }
 }

@@ -33,6 +33,7 @@ private final class CodexProcessSession {
     private var completion: ((Result<Data, Error>) -> Void)?
     private var finished = false
     private var timeoutWorkItem: DispatchWorkItem?
+    private var keepAlive: CodexProcessSession?
 
     init(executable: URL, input: Data, responseID: Int, timeout: TimeInterval) {
         self.executable = executable
@@ -42,6 +43,7 @@ private final class CodexProcessSession {
     }
 
     func start(completion: @escaping (Result<Data, Error>) -> Void) {
+        keepAlive = self
         self.completion = completion
         process.executableURL = executable
         process.arguments = ["app-server", "--stdio"]
@@ -143,5 +145,6 @@ private final class CodexProcessSession {
         try? stdin.fileHandleForWriting.close()
         if process.isRunning { process.terminate() }
         completion?(result)
+        keepAlive = nil
     }
 }

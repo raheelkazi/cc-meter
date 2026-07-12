@@ -3,59 +3,72 @@ import AppKit
 import CCMeterCore
 
 struct PopoverView: View {
-    @ObservedObject var viewModel: MeterViewModel
+    @ObservedObject var dashboard: DashboardViewModel
     var onOpenSettings: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Claude Code Usage").font(.headline)
+                Text("Usage").font(.headline)
                 Spacer()
-                Button(viewModel.displayMode == .used ? "Used" : "Left") {
-                    viewModel.toggleMode()
+                Button(dashboard.displayMode == .used ? "Used" : "Left") {
+                    dashboard.toggleMode()
                 }
                 .buttonStyle(.borderless)
                 .help("Toggle used vs remaining")
             }
 
-            if let stale = viewModel.staleSnapshot {
-                staleSnapshotView(stale)
-            }
+            providerSection(provider: .claude, viewModel: dashboard.claude)
 
-            if let hero = viewModel.hero {
-                heroView(hero)
-            }
-
-            content
-
-            if let spend = viewModel.spend {
+            if dashboard.showsCodex {
                 Divider()
-                spendView(spend)
+                providerSection(provider: .codex, viewModel: dashboard.codex)
             }
 
             Divider()
             HStack {
-                Button("Refresh") { viewModel.refreshNow() }
+                Button("Refresh") { dashboard.refreshNow() }
                 Spacer()
-                if let updated = viewModel.lastUpdatedText {
-                    Text(updated).font(.caption2).foregroundStyle(.tertiary)
-                    Spacer()
-                }
                 Button("Settings…") { onOpenSettings() }
                 Button("Quit") { NSApplication.shared.terminate(nil) }
             }
             .font(.caption)
         }
         .padding(14)
-        .frame(width: 340)
+        .frame(width: 360)
     }
 
-    @ViewBuilder private var content: some View {
+    @ViewBuilder private func providerSection(provider: UsageProvider,
+                                               viewModel: MeterViewModel) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(provider.displayName).font(.subheadline.weight(.semibold))
+                Spacer()
+                if let updated = viewModel.lastUpdatedText {
+                    Text(updated).font(.caption2).foregroundStyle(.tertiary)
+                }
+            }
+
+            if let stale = viewModel.staleSnapshot {
+                staleSnapshotView(stale)
+            }
+            if let hero = viewModel.hero {
+                heroView(hero)
+            }
+            providerContent(provider: provider, viewModel: viewModel)
+            if let spend = viewModel.spend {
+                spendView(spend)
+            }
+        }
+    }
+
+    @ViewBuilder private func providerContent(provider: UsageProvider,
+                                              viewModel: MeterViewModel) -> some View {
         switch viewModel.state {
         case .loading:
             Text("Loading...").foregroundStyle(.secondary)
         case .error(let err):
-            errorView(err)
+            errorView(err, provider: provider)
         case .ok:
             let rows = viewModel.detailRows
             if viewModel.rows.isEmpty {
@@ -225,12 +238,20 @@ struct PopoverView: View {
         return String(format: "\(symbol)%.2f", amount)
     }
 
-    @ViewBuilder private func errorView(_ err: UsageError) -> some View {
+    @ViewBuilder private func errorView(_ err: UsageError, provider: UsageProvider) -> some View {
         switch err {
         case .noCredentials:
-            Text("Not signed in. Run `claude` to authenticate.").foregroundStyle(.secondary)
+            if provider == .claude {
+                Text("Not signed in. Run `claude` to authenticate.").foregroundStyle(.secondary)
+            } else {
+                Text("Not signed in. Open Codex or run `codex login`.").foregroundStyle(.secondary)
+            }
         case .unauthorized:
-            Text("Session expired. Run `claude` to re-authenticate.").foregroundStyle(.secondary)
+            if provider == .claude {
+                Text("Session expired. Run `claude` to re-authenticate.").foregroundStyle(.secondary)
+            } else {
+                Text("Codex session expired. Open Codex or run `codex login`.").foregroundStyle(.secondary)
+            }
         case .rateLimited:
             Text("Rate limited. Retrying shortly...").foregroundStyle(.secondary)
         case .network(let message):

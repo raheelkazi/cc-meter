@@ -7,12 +7,12 @@ import CCMeterCore
 final class MenuBarController {
     private let statusItem: NSStatusItem
     private let popover = NSPopover()
-    private let viewModel: MeterViewModel
+    private let dashboard: DashboardViewModel
     private let onOpenSettings: () -> Void
     private var cancellables = Set<AnyCancellable>()
 
-    init(viewModel: MeterViewModel, onOpenSettings: @escaping () -> Void = {}) {
-        self.viewModel = viewModel
+    init(dashboard: DashboardViewModel, onOpenSettings: @escaping () -> Void = {}) {
+        self.dashboard = dashboard
         self.onOpenSettings = onOpenSettings
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     }
@@ -23,15 +23,15 @@ final class MenuBarController {
             button.action = #selector(togglePopover)
         }
         popover.behavior = .transient
-        popover.contentSize = NSSize(width: 340, height: 360)
-        let root = PopoverView(viewModel: viewModel, onOpenSettings: { [weak self] in
+        popover.contentSize = NSSize(width: 360, height: 560)
+        let root = PopoverView(dashboard: dashboard, onOpenSettings: { [weak self] in
             self?.popover.performClose(nil)
             self?.onOpenSettings()
         })
         popover.contentViewController = NSHostingController(rootView: root)
 
         // Re-render the status title on any published change.
-        viewModel.objectWillChange
+        dashboard.objectWillChange
             .receive(on: RunLoop.main)
             .sink { [weak self] in self?.updateTitle() }
             .store(in: &cancellables)
@@ -40,17 +40,11 @@ final class MenuBarController {
     }
 
     private func updateTitle() {
-        statusItem.button?.attributedTitle = Self.titleString(for: viewModel)
+        statusItem.button?.attributedTitle = Self.titleString(for: dashboard)
     }
 
-    static func titleString(for vm: MeterViewModel) -> NSAttributedString {
-        switch vm.state {
-        case .loading:
-            return NSAttributedString(string: "CC ...")
-        case .error:
-            return NSAttributedString(string: "CC !")
-        case .ok:
-            guard let compact = vm.compact else { return NSAttributedString(string: "CC") }
+    static func titleString(for dashboard: DashboardViewModel) -> NSAttributedString {
+        if let compact = dashboard.compact {
             let result = NSMutableAttributedString(
                 string: "\u{25CF} ",
                 attributes: [.foregroundColor: compact.color.nsColor]
@@ -58,6 +52,9 @@ final class MenuBarController {
             result.append(NSAttributedString(string: "\(compact.percent)%"))
             return result
         }
+        if dashboard.isLoading { return NSAttributedString(string: "CC ...") }
+        if dashboard.hasError { return NSAttributedString(string: "CC !") }
+        return NSAttributedString(string: "CC")
     }
 
     @objc private func togglePopover() {

@@ -91,12 +91,14 @@ public final class FileHistoryStore: HistoryStoring {
     }
 
     /// Default location: ~/Library/Application Support/cc-meter/history.json.
-    public static func defaultURL(fileManager: FileManager = .default) -> URL {
+    public static func defaultURL(provider: UsageProvider = .claude,
+                                  fileManager: FileManager = .default) -> URL {
         let base = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? fileManager.temporaryDirectory
         let dir = base.appendingPathComponent("cc-meter", isDirectory: true)
         try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir.appendingPathComponent("history.json")
+        let filename = provider == .claude ? "history.json" : "history-codex.json"
+        return dir.appendingPathComponent(filename)
     }
 
     public func record(_ usage: Usage) {

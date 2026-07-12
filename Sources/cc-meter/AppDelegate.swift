@@ -6,7 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var controller: MenuBarController?
     private var settingsWindow: SettingsWindowController?
     private let preferencesStore = UserDefaultsPreferencesStore()
-    private var viewModel: MeterViewModel?
+    private var dashboard: DashboardViewModel?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         DebugLog.log("didFinishLaunching enter")
@@ -35,40 +35,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                  refresher: refresher,
                                  now: { Date() })
 
-        let history = FileHistoryStore(url: FileHistoryStore.defaultURL())
+        let history = FileHistoryStore(url: FileHistoryStore.defaultURL(provider: .claude))
 
         // 180s default polling: the usage endpoint's rate budget is shared with
         // Claude Code itself (a handful of requests per ~5 minutes), so a tighter
         // cadence trips 429s. DiskUsageStore seeds the display with the last good
         // fetch at startup so a rate-limited first poll shows real numbers.
-        let viewModel = MeterViewModel(client: client,
-                                       interval: preferences.pollInterval,
-                                       store: DiskUsageStore.standard(),
-                                       preferences: preferences,
-                                       history: history,
-                                       notifier: ThresholdNotifier(),
-                                       notificationSink: OsascriptNotifier())
-        self.viewModel = viewModel
+        let claudeMeter = MeterViewModel(provider: .claude,
+                                         client: client,
+                                         interval: preferences.pollInterval,
+                                         store: DiskUsageStore.standard(provider: .claude),
+                                         preferences: preferences,
+                                         history: history,
+                                         notifier: ThresholdNotifier(),
+                                         notificationSink: OsascriptNotifier())
+
+        let codexClient = CodexUsageClient(
+            resolver: CodexExecutableResolver(),
+            transport: CodexAppServerProcess(),
+            appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
+                as? String ?? "development"
+        )
+        let codexMeter = MeterViewModel(
+            provider: .codex,
+            client: codexClient,
+            interval: preferences.pollInterval,
+            store: DiskUsageStore.standard(provider: .codex),
+            preferences: preferences,
+            history: FileHistoryStore(url: FileHistoryStore.defaultURL(provider: .codex)),
+            notifier: ThresholdNotifier(),
+            notificationSink: OsascriptNotifier()
+        )
+        let dashboard = DashboardViewModel(claude: claudeMeter, codex: codexMeter)
+        self.dashboard = dashboard
 
         settingsWindow = SettingsWindowController(
             loadPreferences: { [preferencesStore] in preferencesStore.load() },
             onChange: { [weak self] prefs in self?.applyPreferences(prefs) }
         )
 
-        let controller = MenuBarController(viewModel: viewModel) { [weak self] in
+        let controller = MenuBarController(dashboard: dashboard) { [weak self] in
             self?.settingsWindow?.show()
         }
         controller.install()
         self.controller = controller
 
-        viewModel.start()
+        dashboard.start()
         DebugLog.log("didFinishLaunching complete; entering run loop")
     }
 
     private func applyPreferences(_ preferences: Preferences) {
         let previous = preferencesStore.load()
         preferencesStore.save(preferences)
-        viewModel?.apply(preferences)
+        dashboard?.apply(preferences)
         if preferences.launchAtLogin != previous.launchAtLogin {
             LoginItem.setEnabled(preferences.launchAtLogin)
         }
