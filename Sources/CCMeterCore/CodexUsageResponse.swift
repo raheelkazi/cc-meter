@@ -14,6 +14,42 @@ public enum CodexResponseError: Error, Equatable {
     case missingResult
 }
 
+struct CodexConfigResponse: Decodable {
+    let result: ResultPayload?
+
+    struct ResultPayload: Decodable {
+        let config: Config?
+    }
+
+    struct Config: Decodable {
+        let model: String?
+    }
+
+    var activeModelID: String? {
+        result?.config?.model?.trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+    }
+}
+
+struct CodexModelListResponse: Decodable {
+    let result: ResultPayload?
+
+    struct ResultPayload: Decodable {
+        let data: [Model]
+    }
+
+    struct Model: Decodable {
+        let model: String
+        let displayName: String
+    }
+
+    func displayName(for modelID: String) -> String? {
+        result?.data.first { $0.model == modelID }?.displayName
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+    }
+}
+
 public struct CodexRateLimitsResponse: Decodable {
     public let id: Int?
     public let result: ResultPayload?
@@ -51,7 +87,7 @@ public struct CodexRateLimitsResponse: Decodable {
         let resetsAt: TimeInterval
     }
 
-    public func toUsage(now: Date) throws -> Usage {
+    public func toUsage(now: Date, unnamedCodexModelName: String? = nil) throws -> Usage {
         if let error { throw error }
         guard let result else { throw CodexResponseError.missingResult }
 
@@ -69,7 +105,13 @@ public struct CodexRateLimitsResponse: Decodable {
                                            ("secondary", group.secondary)] {
                 guard let window = optionalWindow else { continue }
                 let duration = Self.durationLabel(minutes: window.windowDurationMins)
-                let name = group.limitName?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let explicitName = group.limitName?
+                    .trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+                let fallbackName = groupID == "codex"
+                    ? unnamedCodexModelName?
+                        .trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+                    : nil
+                let name = explicitName ?? fallbackName
                 let label = name.flatMap { $0.isEmpty ? nil : "\(duration) (\($0))" } ?? duration
                 candidates.append(Candidate(groupID: groupID,
                                             identity: "codex:\(groupID):\(role)",
@@ -108,4 +150,8 @@ public struct CodexRateLimitsResponse: Decodable {
         }
         return "\(minutes)-minute"
     }
+}
+
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }

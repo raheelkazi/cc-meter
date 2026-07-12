@@ -7,8 +7,8 @@ public protocol CodexExecutableResolving {
 public protocol CodexAppServerTransport {
     func exchange(executable: URL,
                   input: Data,
-                  responseID: Int,
-                  timeout: TimeInterval) async throws -> Data
+                  responseIDs: Set<Int>,
+                  timeout: TimeInterval) async throws -> [Int: Data]
 }
 
 public enum CodexTransportError: Error, Equatable {
@@ -85,12 +85,17 @@ public struct CodexUsageClient: UsageFetching {
     public func fetch() async -> Result<Usage, UsageError> {
         guard let executable = resolver.resolve() else { return .failure(.noCredentials) }
         do {
-            let data = try await transport.exchange(executable: executable,
-                                                    input: requestData(),
-                                                    responseID: 2,
-                                                    timeout: timeout)
+            let responses = try await transport.exchange(executable: executable,
+                                                         input: requestData(),
+                                                         responseIDs: [2, 3, 4],
+                                                         timeout: timeout)
+            guard let data = responses[2] else {
+                throw CodexResponseError.missingResult
+            }
             let response = try JSONDecoder().decode(CodexRateLimitsResponse.self, from: data)
-            return .success(try response.toUsage(now: now()))
+            let modelName = activeModelDisplayName(from: responses)
+            return .success(try response.toUsage(now: now(),
+                                                 unnamedCodexModelName: modelName))
         } catch let error as CodexProtocolError {
             return .failure(mapProtocolError(error))
         } catch let error as CodexTransportError {
@@ -104,13 +109,26 @@ public struct CodexUsageClient: UsageFetching {
         }
     }
 
+    private func activeModelDisplayName(from responses: [Int: Data]) -> String? {
+        let decoder = JSONDecoder()
+        guard let configData = responses[3],
+              let modelData = responses[4],
+              let config = try? decoder.decode(CodexConfigResponse.self, from: configData),
+              let modelID = config.activeModelID,
+              let models = try? decoder.decode(CodexModelListResponse.self, from: modelData)
+        else { return nil }
+        return models.displayName(for: modelID)
+    }
+
     private func requestData() -> Data {
         let encodedVersion = (try? JSONEncoder().encode(appVersion))
             .flatMap { String(data: $0, encoding: .utf8) } ?? "\"development\""
         let lines = [
             "{\"method\":\"initialize\",\"id\":1,\"params\":{\"clientInfo\":{\"name\":\"cc_meter\",\"title\":\"cc-meter\",\"version\":\(encodedVersion)}}}",
             "{\"method\":\"initialized\"}",
-            "{\"method\":\"account/rateLimits/read\",\"id\":2}"
+            "{\"method\":\"account/rateLimits/read\",\"id\":2}",
+            "{\"method\":\"config/read\",\"id\":3,\"params\":{}}",
+            "{\"method\":\"model/list\",\"id\":4,\"params\":{}}"
         ]
         return Data((lines.joined(separator: "\n") + "\n").utf8)
     }

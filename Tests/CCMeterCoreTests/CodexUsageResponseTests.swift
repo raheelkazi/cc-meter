@@ -29,6 +29,46 @@ final class CodexUsageResponseTests: XCTestCase {
                        ["1-day", "90-minute"])
     }
 
+    func testUnnamedCodexGroupUsesActiveModelDisplayNameWithoutChangingIdentity() throws {
+        let data = """
+        {"id":2,"result":{"rateLimitsByLimitId":{
+          "codex":{"limitId":"codex","limitName":null,
+            "primary":{"usedPercent":3,"windowDurationMins":10080,"resetsAt":2000000}}
+        }}}
+        """.data(using: .utf8)!
+        let response = try JSONDecoder().decode(CodexRateLimitsResponse.self, from: data)
+
+        let limit = try XCTUnwrap(response.toUsage(
+            now: now,
+            unnamedCodexModelName: "GPT-5.6-Sol"
+        ).limits.first)
+
+        XCTAssertEqual(limit.kind.label, "7-day (GPT-5.6-Sol)")
+        XCTAssertEqual(limit.kind.identity, "codex:codex:primary")
+    }
+
+    func testExplicitLimitNameWinsOverActiveModelDisplayName() throws {
+        let response = try JSONDecoder().decode(CodexRateLimitsResponse.self,
+                                                from: Fixtures.codexMultiLimitJSON)
+
+        XCTAssertEqual(
+            try response.toUsage(now: now, unnamedCodexModelName: "GPT-5.6-Sol")
+                .limits.map(\.kind.label),
+            ["5-hour (GPT-5.6-Sol)", "7-day (GPT-5.6-Sol)",
+             "7-day (GPT-5.3-Codex-Spark)"]
+        )
+    }
+
+    func testMissingActiveModelMetadataKeepsGenericLabel() throws {
+        let data = """
+        {"id":2,"result":{"rateLimits":{"limitId":"codex","limitName":null,
+          "primary":{"usedPercent":3,"windowDurationMins":10080,"resetsAt":2000000}}}}
+        """.data(using: .utf8)!
+        let response = try JSONDecoder().decode(CodexRateLimitsResponse.self, from: data)
+
+        XCTAssertEqual(try response.toUsage(now: now).limits.first?.kind.label, "7-day")
+    }
+
     func testSuccessfulEmptyResponseProducesNoLimits() throws {
         let data = "{\"id\":2,\"result\":{\"rateLimits\":null,\"rateLimitsByLimitId\":{}}}"
             .data(using: .utf8)!

@@ -5,12 +5,12 @@ public final class CodexAppServerProcess: CodexAppServerTransport {
 
     public func exchange(executable: URL,
                          input: Data,
-                         responseID: Int,
-                         timeout: TimeInterval) async throws -> Data {
+                         responseIDs: Set<Int>,
+                         timeout: TimeInterval) async throws -> [Int: Data] {
         try await withCheckedThrowingContinuation { continuation in
             let session = CodexProcessSession(executable: executable,
                                               input: input,
-                                              responseID: responseID,
+                                              responseIDs: responseIDs,
                                               timeout: timeout)
             session.start { result in
                 continuation.resume(with: result)
@@ -22,7 +22,7 @@ public final class CodexAppServerProcess: CodexAppServerTransport {
 private final class CodexProcessSession {
     private let executable: URL
     private let input: Data
-    private let responseID: Int
+    private let responseIDs: Set<Int>
     private let timeout: TimeInterval
     private let process = Process()
     private let stdin = Pipe()
@@ -31,19 +31,20 @@ private final class CodexProcessSession {
     private let lock = NSLock()
     private var stdoutBuffer = Data()
     private var stderrBuffer = Data()
-    private var completion: ((Result<Data, Error>) -> Void)?
+    private var responses: [Int: Data] = [:]
+    private var completion: ((Result<[Int: Data], Error>) -> Void)?
     private var finished = false
     private var timeoutWorkItem: DispatchWorkItem?
     private var keepAlive: CodexProcessSession?
 
-    init(executable: URL, input: Data, responseID: Int, timeout: TimeInterval) {
+    init(executable: URL, input: Data, responseIDs: Set<Int>, timeout: TimeInterval) {
         self.executable = executable
         self.input = input
-        self.responseID = responseID
+        self.responseIDs = responseIDs
         self.timeout = timeout
     }
 
-    func start(completion: @escaping (Result<Data, Error>) -> Void) {
+    func start(completion: @escaping (Result<[Int: Data], Error>) -> Void) {
         keepAlive = self
         self.completion = completion
         process.executableURL = executable
@@ -110,9 +111,8 @@ private final class CodexProcessSession {
         }
         lock.unlock()
 
-        for line in lines where responseMatches(line) {
-            finish(.success(line))
-            return
+        for line in lines {
+            collectResponse(line)
         }
     }
 
@@ -125,10 +125,23 @@ private final class CodexProcessSession {
         lock.unlock()
     }
 
-    private func responseMatches(_ line: Data) -> Bool {
+    private func collectResponse(_ line: Data) {
         guard let object = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
-              let id = object["id"] as? NSNumber else { return false }
-        return id.intValue == responseID
+              let number = object["id"] as? NSNumber else { return }
+        let id = number.intValue
+        guard responseIDs.contains(id) else { return }
+
+        lock.lock()
+        guard !finished else {
+            lock.unlock()
+            return
+        }
+        responses[id] = line
+        let complete = responseIDs.allSatisfy { responses[$0] != nil }
+        let collected = responses
+        lock.unlock()
+
+        if complete { finish(.success(collected)) }
     }
 
     private func sanitizedStderr() -> String {
@@ -145,7 +158,7 @@ private final class CodexProcessSession {
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func finish(_ result: Result<Data, Error>) {
+    private func finish(_ result: Result<[Int: Data], Error>) {
         lock.lock()
         guard !finished else {
             lock.unlock()

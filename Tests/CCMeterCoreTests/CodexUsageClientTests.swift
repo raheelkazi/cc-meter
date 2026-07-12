@@ -7,19 +7,19 @@ private struct StubCodexResolver: CodexExecutableResolving {
 }
 
 private final class StubCodexTransport: CodexAppServerTransport {
-    var result: Result<Data, Error>
+    var result: Result<[Int: Data], Error>
     private(set) var executable: URL?
     private(set) var input: Data?
-    private(set) var responseID: Int?
+    private(set) var responseIDs: Set<Int>?
     private(set) var timeout: TimeInterval?
 
-    init(_ result: Result<Data, Error>) { self.result = result }
+    init(_ result: Result<[Int: Data], Error>) { self.result = result }
 
     func exchange(executable: URL, input: Data,
-                  responseID: Int, timeout: TimeInterval) async throws -> Data {
+                  responseIDs: Set<Int>, timeout: TimeInterval) async throws -> [Int: Data] {
         self.executable = executable
         self.input = input
-        self.responseID = responseID
+        self.responseIDs = responseIDs
         self.timeout = timeout
         return try result.get()
     }
@@ -33,7 +33,12 @@ final class CodexUsageClientTests: XCTestCase {
                         error: Error? = nil,
                         executable: URL? = URL(fileURLWithPath: "/test/codex"))
         -> (CodexUsageClient, StubCodexTransport) {
-        let transport = StubCodexTransport(error.map(Result.failure) ?? .success(response))
+        let responses = [
+            2: response,
+            3: Data(#"{"id":3,"result":{"config":{"model":"gpt-5.6-sol"}}}"#.utf8),
+            4: Data(#"{"id":4,"result":{"data":[{"model":"gpt-5.6-sol","displayName":"GPT-5.6-Sol"}]}}"#.utf8)
+        ]
+        let transport = StubCodexTransport(error.map(Result.failure) ?? .success(responses))
         let client = CodexUsageClient(
             resolver: StubCodexResolver(url: executable),
             transport: transport,
@@ -49,16 +54,18 @@ final class CodexUsageClientTests: XCTestCase {
         _ = await client.fetch()
 
         XCTAssertEqual(transport.executable, executable)
-        XCTAssertEqual(transport.responseID, 2)
+        XCTAssertEqual(transport.responseIDs, [2, 3, 4])
         XCTAssertEqual(transport.timeout, 4)
         let lines = String(data: transport.input!, encoding: .utf8)!
             .split(separator: "\n").map(String.init)
-        XCTAssertEqual(lines.count, 3)
+        XCTAssertEqual(lines.count, 5)
         XCTAssertTrue(lines[0].contains("\"method\":\"initialize\""))
         XCTAssertTrue(lines[0].contains("\"name\":\"cc_meter\""))
         XCTAssertTrue(lines[0].contains("\"version\":\"9.9.9\""))
         XCTAssertEqual(lines[1], "{\"method\":\"initialized\"}")
         XCTAssertEqual(lines[2], "{\"method\":\"account/rateLimits/read\",\"id\":2}")
+        XCTAssertEqual(lines[3], "{\"method\":\"config/read\",\"id\":3,\"params\":{}}")
+        XCTAssertEqual(lines[4], "{\"method\":\"model/list\",\"id\":4,\"params\":{}}")
     }
 
     func testMissingExecutableIsNoCredentials() async {
@@ -111,6 +118,35 @@ final class CodexUsageClientTests: XCTestCase {
         XCTAssertTrue(message.contains("Codex response"))
     }
 
+    func testResolvesActiveModelDisplayNameForUnnamedCodexLimits() async throws {
+        let (client, _) = client()
+
+        let result = await client.fetch()
+        let usage = try XCTUnwrap(result.successValue)
+
+        XCTAssertEqual(usage.limits.map(\.kind.label), [
+            "5-hour (GPT-5.6-Sol)",
+            "7-day (GPT-5.6-Sol)",
+            "7-day (GPT-5.3-Codex-Spark)"
+        ])
+    }
+
+    func testMalformedModelMetadataFallsBackToGenericLabels() async throws {
+        let (client, transport) = client()
+        transport.result = .success([
+            2: Fixtures.codexMultiLimitJSON,
+            3: Data("not json".utf8),
+            4: Data(#"{"id":4,"error":{"code":-32601,"message":"Method not found"}}"#.utf8)
+        ])
+
+        let result = await client.fetch()
+        let usage = try XCTUnwrap(result.successValue)
+
+        XCTAssertEqual(usage.limits.map(\.kind.label), [
+            "5-hour", "7-day", "7-day (GPT-5.3-Codex-Spark)"
+        ])
+    }
+
     func testResolverSelectsFirstExecutableCandidate() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("cc-meter-codex-resolver-\(UUID().uuidString)")
@@ -131,7 +167,7 @@ final class CodexUsageClientTests: XCTestCase {
             _ = try await transport.exchange(
                 executable: URL(fileURLWithPath: "/usr/bin/false"),
                 input: Data(repeating: 0x78, count: 64 * 1024),
-                responseID: 2,
+                responseIDs: [2, 3, 4],
                 timeout: 2
             )
             XCTFail("expected the exited process to fail")
@@ -143,11 +179,43 @@ final class CodexUsageClientTests: XCTestCase {
             XCTFail("unexpected error: \(error)")
         }
     }
+
+    func testProcessTransportCollectsAllExpectedResponses() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cc-meter-codex-transport-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let executable = directory.appendingPathComponent("codex")
+        let script = """
+        #!/bin/sh
+        printf '%s\\n' '{"method":"account/rateLimits/updated"}' '{"id":4,"result":{"data":[]}}' '{"id":2,"result":{"rateLimits":null}}' '{"id":3,"result":{"config":{}}}'
+        sleep 1
+        """
+        try Data(script.utf8).write(to: executable)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755],
+                                              ofItemAtPath: executable.path)
+
+        let responses = try await CodexAppServerProcess().exchange(
+            executable: executable,
+            input: Data("requests\\n".utf8),
+            responseIDs: [2, 3, 4],
+            timeout: 2
+        )
+
+        XCTAssertEqual(Set(responses.keys), [2, 3, 4])
+        XCTAssertTrue(String(data: responses[2]!, encoding: .utf8)!.contains("rateLimits"))
+        XCTAssertTrue(String(data: responses[4]!, encoding: .utf8)!.contains("data"))
+    }
 }
 
 private extension Result where Failure == UsageError {
     var failureError: UsageError? {
         if case .failure(let error) = self { return error }
+        return nil
+    }
+
+    var successValue: Success? {
+        if case .success(let value) = self { return value }
         return nil
     }
 }
