@@ -4,12 +4,22 @@ public enum WindowKind: Equatable, Codable {
     case session
     case weeklyAll
     case weeklyScoped(model: String)
+    case named(label: String, isSession: Bool)
 
     public var label: String {
         switch self {
         case .session: return "5-hour"
         case .weeklyAll: return "7-day"
         case .weeklyScoped(let model): return "7-day (\(model))"
+        case .named(let label, _): return label
+        }
+    }
+
+    public var isSessionWindow: Bool {
+        switch self {
+        case .session: return true
+        case .named(_, let isSession): return isSession
+        case .weeklyAll, .weeklyScoped: return false
         }
     }
 }

@@ -91,4 +91,14 @@ final class NotificationsTests: XCTestCase {
         let p = prefs(thresholds: [], headsUp: 10)
         XCTAssertTrue(n.evaluate(sessionUsage(30, resetsIn: 3600), preferences: p, now: now).isEmpty)
     }
+
+    func testCodexNotificationIdentityAndCopyAreProviderQualified() {
+        let n = ThresholdNotifier()
+        _ = n.evaluate(sessionUsage(50), provider: .codex, preferences: prefs(), now: now)
+        let event = n.evaluate(sessionUsage(82), provider: .codex, preferences: prefs(), now: now).first
+
+        XCTAssertTrue(event?.id.hasPrefix("codex#") ?? false)
+        XCTAssertTrue(event?.title.contains("Codex") ?? false)
+        XCTAssertTrue(event?.body.contains("Codex") ?? false)
+    }
 }

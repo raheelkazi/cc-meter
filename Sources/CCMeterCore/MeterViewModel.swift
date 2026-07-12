@@ -52,6 +52,7 @@ public struct MeterRow: Identifiable {
 
 @MainActor
 public final class MeterViewModel: ObservableObject {
+    public let provider: UsageProvider
     @Published public private(set) var state: MeterState = .loading
     @Published public var displayMode: DisplayMode = .used
     /// Time of the last successful fetch, backing the "updated ..." staleness cue.
@@ -90,7 +91,8 @@ public final class MeterViewModel: ObservableObject {
     /// whole window (>=5h), so a generous minutes-scale tolerance is unambiguous.
     private let windowMatchTolerance: TimeInterval = 600
 
-    public init(client: UsageFetching,
+    public init(provider: UsageProvider = .claude,
+                client: UsageFetching,
                 interval: TimeInterval = 60,
                 store: UsageStoring? = nil,
                 cacheMaxAge: TimeInterval = 24 * 3600,
@@ -99,6 +101,7 @@ public final class MeterViewModel: ObservableObject {
                 notifier: ThresholdNotifier? = nil,
                 notificationSink: Notifying? = nil,
                 now: @escaping () -> Date = { Date() }) {
+        self.provider = provider
         self.client = client
         self.interval = interval
         self.store = store
@@ -153,7 +156,7 @@ public final class MeterViewModel: ObservableObject {
             backoffUntil = nil
             staleSnapshot = nil
             store?.save(SavedUsage(usage: usage, savedAt: now()))
-            if preferences.historyEnabled { history?.record(usage) }
+            if preferences.historyEnabled { history?.record(usage, provider: provider) }
             dispatchNotifications(for: usage)
         case .failure(let error):
             if case .rateLimited(let retryAfter) = error {
@@ -208,7 +211,8 @@ public final class MeterViewModel: ObservableObject {
 
     private func dispatchNotifications(for usage: Usage) {
         guard let notifier, let sink = notificationSink else { return }
-        for event in notifier.evaluate(usage, preferences: preferences, now: now()) {
+        for event in notifier.evaluate(usage, provider: provider,
+                                       preferences: preferences, now: now()) {
             sink.post(event)
         }
     }
@@ -357,7 +361,7 @@ public final class MeterViewModel: ObservableObject {
         // Match by tolerance rather than exact equality because `resets_at`
         // jitters sub-second between fetches. (Legacy samples without a
         // recorded window are treated as matching.)
-        (history?.recent(kindLabel: label, since: .distantPast) ?? [])
+        (history?.recent(provider: provider, kindLabel: label, since: .distantPast) ?? [])
             .filter { sample in
                 guard let windowResetsAt = sample.windowResetsAt else { return true }
                 return abs(windowResetsAt.timeIntervalSince(limit.resetsAt)) < windowMatchTolerance

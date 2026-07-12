@@ -33,42 +33,47 @@ public final class ThresholdNotifier {
     /// Advances internal tracking to reflect `usage` and returns the events that
     /// should be posted for this tick. State is always updated (even when
     /// notifications are disabled) so re-enabling never replays old crossings.
-    public func evaluate(_ usage: Usage, preferences: Preferences, now: Date) -> [NotificationEvent] {
+    public func evaluate(_ usage: Usage,
+                         provider: UsageProvider = .claude,
+                         preferences: Preferences,
+                         now: Date) -> [NotificationEvent] {
         var events: [NotificationEvent] = []
         let thresholds = preferences.notificationThresholds.sorted()
 
         for limit in usage.limits {
             let label = limit.kind.label
-            let isNewWindow = windowResetsAt[label] != limit.resetsAt
+            let key = "\(provider.rawValue)#\(label)"
+            let isNewWindow = windowResetsAt[key] != limit.resetsAt
             if isNewWindow {
-                windowResetsAt[label] = limit.resetsAt
-                firedThresholds[label] = []
-                lastPercent[label] = limit.percent   // baseline, no retroactive fire
+                windowResetsAt[key] = limit.resetsAt
+                firedThresholds[key] = []
+                lastPercent[key] = limit.percent   // baseline, no retroactive fire
             }
 
-            let previous = lastPercent[label] ?? limit.percent
+            let previous = lastPercent[key] ?? limit.percent
             for threshold in thresholds {
-                let alreadyFired = firedThresholds[label]?.contains(threshold) ?? false
+                let alreadyFired = firedThresholds[key]?.contains(threshold) ?? false
                 if previous < threshold, limit.percent >= threshold, !alreadyFired {
-                    events.append(Self.thresholdEvent(limit: limit, threshold: threshold, now: now))
-                    firedThresholds[label, default: []].insert(threshold)
+                    events.append(Self.thresholdEvent(provider: provider, limit: limit,
+                                                      threshold: threshold, now: now))
+                    firedThresholds[key, default: []].insert(threshold)
                 }
             }
-            lastPercent[label] = limit.percent
+            lastPercent[key] = limit.percent
 
-            if let mins = preferences.sessionResetHeadsUpMinutes, limit.kind == .session {
+            if let mins = preferences.sessionResetHeadsUpMinutes, limit.kind.isSessionWindow {
                 let secondsLeft = limit.resetsAt.timeIntervalSince(now)
-                let key = "\(label)@\(limit.resetsAt.timeIntervalSince1970)"
+                let headsUpKey = "\(key)@\(limit.resetsAt.timeIntervalSince1970)"
                 let withinWindow = secondsLeft > 0 && secondsLeft <= Double(mins * 60)
                 if isNewWindow && withinWindow {
                     // First time we see this window and we're already inside the
                     // heads-up range (e.g. relaunched mid-window): suppress rather
                     // than replay an alert the user already got. Only a live
                     // transition into the range should fire.
-                    firedHeadsUp.insert(key)
-                } else if withinWindow && !firedHeadsUp.contains(key) {
-                    events.append(Self.headsUpEvent(limit: limit, now: now))
-                    firedHeadsUp.insert(key)
+                    firedHeadsUp.insert(headsUpKey)
+                } else if withinWindow && !firedHeadsUp.contains(headsUpKey) {
+                    events.append(Self.headsUpEvent(provider: provider, limit: limit, now: now))
+                    firedHeadsUp.insert(headsUpKey)
                 }
             }
         }
@@ -76,23 +81,29 @@ public final class ThresholdNotifier {
         return preferences.notificationsEnabled ? events : []
     }
 
-    private static func thresholdEvent(limit: UsageLimit, threshold: Double, now: Date) -> NotificationEvent {
+    private static func thresholdEvent(provider: UsageProvider,
+                                       limit: UsageLimit,
+                                       threshold: Double,
+                                       now: Date) -> NotificationEvent {
         let pct = Int(threshold.rounded())
         let title: String
         let body: String
         if pct >= 100 {
-            title = "\(limit.kind.label) limit reached"
-            body = "You've hit your \(limit.kind.label) limit. \(countdownText(to: limit.resetsAt, now: now))."
+            title = "\(provider.displayName) · \(limit.kind.label) limit reached"
+            body = "You've hit your \(provider.displayName) \(limit.kind.label) limit. \(countdownText(to: limit.resetsAt, now: now))."
         } else {
-            title = "\(limit.kind.label) usage at \(pct)%"
-            body = "Your \(limit.kind.label) window is \(Int(limit.percent.rounded()))% used. \(countdownText(to: limit.resetsAt, now: now))."
+            title = "\(provider.displayName) · \(limit.kind.label) usage at \(pct)%"
+            body = "Your \(provider.displayName) \(limit.kind.label) window is \(Int(limit.percent.rounded()))% used. \(countdownText(to: limit.resetsAt, now: now))."
         }
-        return NotificationEvent(id: "\(limit.kind.label)#\(pct)", title: title, body: body)
+        return NotificationEvent(id: "\(provider.rawValue)#\(limit.kind.label)#\(pct)",
+                                 title: title, body: body)
     }
 
-    private static func headsUpEvent(limit: UsageLimit, now: Date) -> NotificationEvent {
-        NotificationEvent(id: "\(limit.kind.label)#reset-headsup",
-                          title: "\(limit.kind.label) resets soon",
-                          body: "Your \(limit.kind.label) window \(countdownText(to: limit.resetsAt, now: now)).")
+    private static func headsUpEvent(provider: UsageProvider,
+                                     limit: UsageLimit,
+                                     now: Date) -> NotificationEvent {
+        NotificationEvent(id: "\(provider.rawValue)#\(limit.kind.label)#reset-headsup",
+                          title: "\(provider.displayName) · \(limit.kind.label) resets soon",
+                          body: "Your \(provider.displayName) \(limit.kind.label) window \(countdownText(to: limit.resetsAt, now: now)).")
     }
 }

@@ -51,4 +51,11 @@ final class UsageStoreTests: XCTestCase {
         store.save(sampleSaved())
         XCTAssertTrue(FileManager.default.fileExists(atPath: fileURL.path))
     }
+
+    func testProviderStandardCachesUseDistinctFilenames() {
+        XCTAssertTrue(DiskUsageStore.standard(provider: .claude).fileURL.path
+            .hasSuffix("last-usage.json"))
+        XCTAssertTrue(DiskUsageStore.standard(provider: .codex).fileURL.path
+            .hasSuffix("last-usage-codex.json"))
+    }
 }

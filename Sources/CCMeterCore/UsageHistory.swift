@@ -2,6 +2,7 @@ import Foundation
 
 /// One recorded observation of a single limit's used percent at a point in time.
 public struct HistorySample: Codable, Equatable {
+    public let provider: UsageProvider
     public let kindLabel: String
     public let percent: Double
     public let at: Date
@@ -10,11 +11,29 @@ public struct HistorySample: Codable, Equatable {
     /// old window's burn rate or trend). Optional so older stored files decode.
     public let windowResetsAt: Date?
 
-    public init(kindLabel: String, percent: Double, at: Date, windowResetsAt: Date? = nil) {
+    public init(provider: UsageProvider = .claude,
+                kindLabel: String,
+                percent: Double,
+                at: Date,
+                windowResetsAt: Date? = nil) {
+        self.provider = provider
         self.kindLabel = kindLabel
         self.percent = percent
         self.at = at
         self.windowResetsAt = windowResetsAt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case provider, kindLabel, percent, at, windowResetsAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        provider = try container.decodeIfPresent(UsageProvider.self, forKey: .provider) ?? .claude
+        kindLabel = try container.decode(String.self, forKey: .kindLabel)
+        percent = try container.decode(Double.self, forKey: .percent)
+        at = try container.decode(Date.self, forKey: .at)
+        windowResetsAt = try container.decodeIfPresent(Date.self, forKey: .windowResetsAt)
     }
 }
 
@@ -23,13 +42,25 @@ public protocol HistoryStoring: AnyObject {
     func record(_ usage: Usage)
     /// Samples for a limit at or after `since`, oldest first.
     func recent(kindLabel: String, since: Date) -> [HistorySample]
+    func record(_ usage: Usage, provider: UsageProvider)
+    func recent(provider: UsageProvider, kindLabel: String, since: Date) -> [HistorySample]
+}
+
+public extension HistoryStoring {
+    func record(_ usage: Usage, provider: UsageProvider) { record(usage) }
+    func recent(provider: UsageProvider, kindLabel: String, since: Date) -> [HistorySample] {
+        recent(kindLabel: kindLabel, since: since)
+    }
 }
 
 /// Shared sample math so the file and in-memory stores behave identically.
 enum HistoryMath {
-    static func recent(_ samples: [HistorySample], kindLabel: String, since: Date) -> [HistorySample] {
+    static func recent(_ samples: [HistorySample],
+                       provider: UsageProvider,
+                       kindLabel: String,
+                       since: Date) -> [HistorySample] {
         samples
-            .filter { $0.kindLabel == kindLabel && $0.at >= since }
+            .filter { $0.provider == provider && $0.kindLabel == kindLabel && $0.at >= since }
             .sorted { $0.at < $1.at }
     }
 
@@ -69,9 +100,14 @@ public final class FileHistoryStore: HistoryStoring {
     }
 
     public func record(_ usage: Usage) {
+        record(usage, provider: .claude)
+    }
+
+    public func record(_ usage: Usage, provider: UsageProvider) {
         let clock = now()
         for limit in usage.limits {
-            samples.append(HistorySample(kindLabel: limit.kind.label, percent: limit.percent,
+            samples.append(HistorySample(provider: provider,
+                                         kindLabel: limit.kind.label, percent: limit.percent,
                                          at: clock, windowResetsAt: limit.resetsAt))
         }
         samples = HistoryMath.pruned(samples, now: clock, retention: retention)
@@ -79,7 +115,11 @@ public final class FileHistoryStore: HistoryStoring {
     }
 
     public func recent(kindLabel: String, since: Date) -> [HistorySample] {
-        HistoryMath.recent(samples, kindLabel: kindLabel, since: since)
+        recent(provider: .claude, kindLabel: kindLabel, since: since)
+    }
+
+    public func recent(provider: UsageProvider, kindLabel: String, since: Date) -> [HistorySample] {
+        HistoryMath.recent(samples, provider: provider, kindLabel: kindLabel, since: since)
     }
 
     private func persist() {
@@ -103,16 +143,25 @@ public final class InMemoryHistoryStore: HistoryStoring {
     }
 
     public func record(_ usage: Usage) {
+        record(usage, provider: .claude)
+    }
+
+    public func record(_ usage: Usage, provider: UsageProvider) {
         let clock = now()
         for limit in usage.limits {
-            samples.append(HistorySample(kindLabel: limit.kind.label, percent: limit.percent,
+            samples.append(HistorySample(provider: provider,
+                                         kindLabel: limit.kind.label, percent: limit.percent,
                                          at: clock, windowResetsAt: limit.resetsAt))
         }
         samples = HistoryMath.pruned(samples, now: clock, retention: retention)
     }
 
     public func recent(kindLabel: String, since: Date) -> [HistorySample] {
-        HistoryMath.recent(samples, kindLabel: kindLabel, since: since)
+        recent(provider: .claude, kindLabel: kindLabel, since: since)
+    }
+
+    public func recent(provider: UsageProvider, kindLabel: String, since: Date) -> [HistorySample] {
+        HistoryMath.recent(samples, provider: provider, kindLabel: kindLabel, since: since)
     }
 
 }

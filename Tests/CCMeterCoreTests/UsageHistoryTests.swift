@@ -53,4 +53,23 @@ final class UsageHistoryTests: XCTestCase {
         let reopened = FileHistoryStore(url: url, now: { clock })
         XCTAssertEqual(reopened.recent(kindLabel: "5-hour", since: start.addingTimeInterval(-1)).map(\.percent), [42])
     }
+
+    func testHistoryDoesNotMixProvidersWithSameWindowLabel() {
+        let store = InMemoryHistoryStore(now: { self.start })
+        store.record(usage(session: 10, at: start), provider: .claude)
+        store.record(usage(session: 70, at: start), provider: .codex)
+
+        XCTAssertEqual(store.recent(provider: .claude, kindLabel: "5-hour", since: .distantPast)
+            .map(\.percent), [10])
+        XCTAssertEqual(store.recent(provider: .codex, kindLabel: "5-hour", since: .distantPast)
+            .map(\.percent), [70])
+    }
+
+    func testLegacyHistoryWithoutProviderDecodesAsClaude() throws {
+        let data = """
+        {"kindLabel":"5-hour","percent":12,"at":1000000}
+        """.data(using: .utf8)!
+        let sample = try JSONDecoder().decode(HistorySample.self, from: data)
+        XCTAssertEqual(sample.provider, .claude)
+    }
 }
