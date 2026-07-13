@@ -24,6 +24,18 @@ final class DashboardViewModelTests: XCTestCase {
         ], fetchedAt: now)
     }
 
+    /// Multi-limit usage, one limit per percent, in a stable window order.
+    private func usage(_ percents: [Double]) -> Usage {
+        let kinds: [WindowKind] = [.session, .weeklyAll, .weeklyScoped(model: "Fable")]
+        let limits = percents.enumerated().map { index, percent in
+            UsageLimit(kind: kinds[index % kinds.count],
+                       percent: percent,
+                       resetsAt: now.addingTimeInterval(3600 * Double(index + 1)),
+                       isActive: true)
+        }
+        return Usage(limits: limits, fetchedAt: now)
+    }
+
     private func makeDashboard(claude: Result<Usage, UsageError>,
                                codex: Result<Usage, UsageError>)
         -> (DashboardViewModel, DashboardStubClient, DashboardStubClient) {
@@ -139,4 +151,67 @@ final class DashboardViewModelTests: XCTestCase {
         XCTAssertEqual(dashboard.claude.displayMode, .remaining)
         XCTAssertEqual(dashboard.codex.displayMode, .remaining)
     }
+
+    // MARK: - Critical alert
+    //
+    // The flat popover has no hero, so a limit in trouble has to announce itself.
+    // "Critical" reuses the app's own severity definition (usageColor -> .red), rather
+    // than introducing a second threshold constant that could drift away from the bars.
+
+    func testNoAlertWhileEveryLimitIsBelowCritical() async {
+        let (dashboard, _, _) = makeDashboard(claude: .success(usage([89, 60])),
+                                              codex: .success(usage([70])))
+        await dashboard.refresh()
+
+        XCTAssertNil(dashboard.alert, "89% is amber, not red — nothing has earned a focal point")
+    }
+
+    func testAlertNamesTheWorstCriticalLimitAcrossBothProviders() async throws {
+        let (dashboard, _, _) = makeDashboard(claude: .success(usage([91])),
+                                              codex: .success(usage([94])))
+        await dashboard.refresh()
+
+        let alert = try XCTUnwrap(dashboard.alert)
+        XCTAssertEqual(alert.provider, .codex, "the binding limit is Codex's, not Claude's")
+        XCTAssertEqual(alert.percent, 94)
+        XCTAssertEqual(alert.label, "5-hour")
+    }
+
+    func testAlertCountsOtherElevatedLimitsWithoutStackingBanners() async throws {
+        // 94 red, 61 amber, 2 green -> the alert names the 94 and counts the 61.
+        let (dashboard, _, _) = makeDashboard(claude: .success(usage([94, 61, 2])),
+                                              codex: .success(usage([14])))
+        await dashboard.refresh()
+
+        let alert = try XCTUnwrap(dashboard.alert)
+        XCTAssertEqual(alert.percent, 94)
+        XCTAssertEqual(alert.otherElevatedCount, 1, "the amber 61% counts; the greens do not")
+    }
+
+    func testAlertPercentFollowsTheUsedLeftToggle() async throws {
+        let (dashboard, _, _) = makeDashboard(claude: .success(usage([94])),
+                                              codex: .failure(.noCredentials))
+        await dashboard.refresh()
+        dashboard.toggleMode()
+
+        let alert = try XCTUnwrap(dashboard.alert)
+        XCTAssertEqual(alert.percent, 6, "in Left mode the alert reads remaining, like every row")
+    }
+
+    func testAlertSeverityIgnoresTheUsedLeftToggle() async throws {
+        // 6% *left* is still critical: severity must come from used%, not the displayed number.
+        let (dashboard, _, _) = makeDashboard(claude: .success(usage([94])),
+                                              codex: .failure(.noCredentials))
+        await dashboard.refresh()
+        dashboard.toggleMode()
+
+        XCTAssertNotNil(dashboard.alert, "toggling to Left must not silence a critical limit")
+    }
+
+    func testNoAlertWhileLoading() {
+        let (dashboard, _, _) = makeDashboard(claude: .success(usage([94])),
+                                              codex: .success(usage([94])))
+        XCTAssertNil(dashboard.alert)
+    }
+
 }

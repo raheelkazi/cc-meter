@@ -37,10 +37,17 @@ public struct MeterRow: Identifiable {
     public let id: String
     public let label: String
     public let isPromoted: Bool
+    /// What the row shows, which flips with the Used/Left toggle.
     public let displayPercent: Int
+    /// How full the window actually is. Severity is ranked on this, never on
+    /// `displayPercent` — 6% *left* is still critical, and must stay critical.
+    public let usedPercent: Int
     public let barFraction: Double
     public let color: MeterColor
+    /// "resets in 5d 17h" — for prose contexts.
     public let countdown: String
+    /// "5d 17h" — for the popover's reset column.
+    public let countdownShort: String
     /// Time-to-exhaustion projection, e.g. "~40m to limit", or nil when the pace
     /// is flat/insufficient to project.
     public let burn: String?
@@ -341,9 +348,11 @@ public final class MeterViewModel: ObservableObject {
                             label: label,
                             isPromoted: index == promotedIndex,
                             displayPercent: displayPercent,
+                            usedPercent: used.percent,
                             barFraction: Double(displayPercent) / 100.0,
                             color: used.color,
                             countdown: countdownText(to: limit.resetsAt, now: clock),
+                            countdownShort: countdownValue(to: limit.resetsAt, now: clock),
                             burn: projection.map(burnText),
                             burnUrgent: projection?.willExhaustBeforeReset ?? false,
                             forecast: projection.flatMap {

@@ -2,68 +2,160 @@ import SwiftUI
 import AppKit
 import CCMeterCore
 
+/// A flat list: one row per limit, and no hero unless a limit has earned one.
+///
+/// The panel's job is answering "am I about to hit a wall?", and almost always the answer
+/// is no — so at rest it stays a plain list. A limit only gets a focal point when it goes
+/// critical (`dashboard.alert`), which costs nothing in the state you are usually in.
 struct PopoverView: View {
     @ObservedObject var dashboard: DashboardViewModel
     var onOpenSettings: () -> Void = {}
 
+    private enum Metrics {
+        static let barWidth: CGFloat = 64
+        static let percentWidth: CGFloat = 34
+        static let resetWidth: CGFloat = 48
+        static let barHeight: CGFloat = 4
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Usage").font(.headline)
-                Spacer()
-                Button(dashboard.displayMode == .used ? "Used" : "Left") {
-                    dashboard.toggleMode()
-                }
-                .buttonStyle(.borderless)
-                .help("Toggle used vs remaining")
+        VStack(alignment: .leading, spacing: 10) {
+            header
+
+            if let alert = dashboard.alert {
+                alertView(alert)
             }
 
             ScrollView(.vertical) {
-                VStack(alignment: .leading, spacing: 12) {
-                    providerSection(provider: .claude, viewModel: dashboard.claude)
-
+                VStack(alignment: .leading, spacing: 0) {
+                    providerBlock(provider: .claude, viewModel: dashboard.claude)
                     if dashboard.showsCodex {
-                        Divider()
-                        providerSection(provider: .codex, viewModel: dashboard.codex)
+                        providerBlock(provider: .codex, viewModel: dashboard.codex)
                     }
                 }
             }
-            .frame(maxHeight: 470)
+            .frame(maxHeight: 420)
 
-            Divider()
-            HStack {
-                Button("Refresh") { dashboard.refreshNow() }
-                Spacer()
-                Button("Settings…") { onOpenSettings() }
-                Button("Quit") { NSApplication.shared.terminate(nil) }
-            }
-            .font(.caption)
+            footer
         }
         .padding(14)
         .frame(width: 360)
     }
 
-    @ViewBuilder private func providerSection(provider: UsageProvider,
-                                               viewModel: MeterViewModel) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(provider.displayName).font(.subheadline.weight(.semibold))
-                Spacer()
-                if let updated = viewModel.lastUpdatedText {
-                    Text(updated).font(.caption2).foregroundStyle(.tertiary)
-                }
+    private var header: some View {
+        HStack {
+            Text("Usage").font(.headline)
+            Spacer()
+            // A segmented control, not a bare word: as a plain label this toggle read as a
+            // column header, which is why nobody could find it.
+            Picker("", selection: modeBinding) {
+                Text("Used").tag(DisplayMode.used)
+                Text("Left").tag(DisplayMode.remaining)
             }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            .help("Show used or remaining")
+        }
+    }
+
+    private var modeBinding: Binding<DisplayMode> {
+        Binding(get: { dashboard.displayMode },
+                set: { mode in
+                    guard mode != dashboard.displayMode else { return }
+                    dashboard.toggleMode()
+                })
+    }
+
+    private var footer: some View {
+        HStack {
+            // One "updated" for the whole panel — it describes the fetch, not each provider.
+            if let updated = dashboard.claude.lastUpdatedText {
+                Text(updated).foregroundStyle(.tertiary)
+            }
+            Spacer()
+            Button("Refresh") { dashboard.refreshNow() }
+            Button("Settings…") { onOpenSettings() }
+            Button("Quit") { NSApplication.shared.terminate(nil) }
+        }
+        .font(.caption)
+        .buttonStyle(.borderless)
+    }
+
+    // MARK: - Alert
+
+    @ViewBuilder private func alertView(_ alert: UsageAlert) -> some View {
+        HStack(spacing: 10) {
+            Text("\(alert.percent)%")
+                .font(.title2.weight(.bold))
+                .monospacedDigit()
+                .foregroundStyle(Color(nsColor: .systemRed))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(alert.provider.displayName) · \(alert.label)")
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                Text(alert.countdown)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 0)
+
+            if alert.otherElevatedCount > 0 {
+                Text("+\(alert.otherElevatedCount) near")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color(nsColor: .systemRed).opacity(0.12))
+        )
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(Color(nsColor: .systemRed))
+                .frame(width: 2.5)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(alert.provider.displayName) \(alert.label) at \(alert.percent) percent, \(alert.countdown)")
+    }
+
+    // MARK: - Provider
+
+    @ViewBuilder private func providerBlock(provider: UsageProvider,
+                                            viewModel: MeterViewModel) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(color(for: provider))
+                    .frame(width: 6, height: 6)
+                Text(provider.displayName.uppercased())
+                    .font(.system(size: 10, weight: .bold))
+                    .kerning(0.8)
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.top, 10)
 
             if let stale = viewModel.staleSnapshot {
                 staleSnapshotView(stale)
             }
-            if let hero = viewModel.hero {
-                heroView(hero)
-            }
+
             providerContent(provider: provider, viewModel: viewModel)
+
             if let spend = viewModel.spend {
                 spendView(spend)
             }
+        }
+    }
+
+    private func color(for provider: UsageProvider) -> Color {
+        switch provider {
+        case .claude: return Color(nsColor: .systemOrange)
+        case .codex: return Color(nsColor: .systemBlue)
         }
     }
 
@@ -71,132 +163,95 @@ struct PopoverView: View {
                                               viewModel: MeterViewModel) -> some View {
         switch viewModel.state {
         case .loading:
-            Text("Loading...").foregroundStyle(.secondary)
+            Text("Loading…").font(.caption).foregroundStyle(.secondary)
         case .error(let err):
-            errorView(err, provider: provider)
+            errorView(err, provider: provider).font(.caption)
         case .ok:
-            let rows = viewModel.detailRows
             if viewModel.rows.isEmpty {
-                Text("No active limits reported.").foregroundStyle(.secondary)
+                Text("No active limits reported.").font(.caption).foregroundStyle(.secondary)
             } else {
-                ForEach(rows) { rowView($0) }
+                // Every limit, in a fixed order. Rows never re-sort by severity: the panel
+                // would rearrange under the cursor between refreshes, and the alert already
+                // does the pointing.
+                ForEach(viewModel.rows) { rowView($0) }
             }
         }
     }
+
+    // MARK: - Row
 
     @ViewBuilder private func rowView(_ row: MeterRow) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(row.label).font(.subheadline)
-                Spacer()
-                Text("\(row.displayPercent)%").font(.subheadline).monospacedDigit()
-            }
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 3).fill(Color.gray.opacity(0.2))
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(row.color.swiftUIColor)
-                        // Clamp to [0, 1] so an over-100% usage report cannot
-                        // render the fill wider than its track.
-                        .frame(width: geo.size.width * min(1, max(0, row.barFraction)))
-                }
-            }
-            .frame(height: 6)
-            HStack {
-                Text(row.countdown).font(.caption2).foregroundStyle(.secondary)
-                Spacer()
-            }
-            if let forecast = row.forecast {
-                forecastView(forecast)
-            }
-        }
-    }
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 9) {
+                Text(row.label)
+                    .font(.system(size: 12.5))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
 
-    @ViewBuilder private func heroView(_ hero: MeterHero) -> some View {
-        HStack(spacing: 12) {
-            ZStack {
-                MeterRing(fraction: hero.fraction,
-                          color: hero.color.swiftUIColor,
-                          trackColor: Color.gray.opacity(0.18))
-                Text("\(hero.percent)%")
-                    .font(.title3.weight(.semibold))
+                Spacer(minLength: 4)
+
+                bar(fraction: row.barFraction, color: row.color.swiftUIColor)
+                    .frame(width: Metrics.barWidth, height: Metrics.barHeight)
+
+                Text("\(row.displayPercent)%")
+                    .font(.system(size: 12.5, weight: .semibold))
                     .monospacedDigit()
-            }
-            .frame(width: 72, height: 72)
+                    .foregroundStyle(percentColor(row.color))
+                    .frame(width: Metrics.percentWidth, alignment: .trailing)
 
-            VStack(alignment: .leading, spacing: 5) {
-                Text(hero.status)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(2)
-                Text(heroDetail(hero))
+                // "resets in" was identical on every row; only the value ever changed.
+                Text(row.countdownShort)
+                    .font(.system(size: 11))
+                    .monospacedDigit()
+                    .foregroundStyle(.tertiary)
+                    .frame(width: Metrics.resetWidth, alignment: .trailing)
+            }
+
+            // Forecasts are noise at 3%; they only earn their line when the pace actually
+            // exhausts the window before it resets.
+            if row.burnUrgent, let forecast = row.forecast {
+                Text(forecast.detailText)
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color(nsColor: .systemRed))
+                    .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
-                if let forecast = hero.forecast {
-                    forecastPills(forecast)
-                }
             }
-            Spacer(minLength: 0)
         }
-        .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(hero.color.swiftUIColor.opacity(0.10))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(hero.color.swiftUIColor.opacity(0.25), lineWidth: 1)
-        )
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(row.label), \(row.displayPercent) percent, \(row.countdown)")
     }
 
-    private func heroDetail(_ hero: MeterHero) -> String {
-        if let forecast = hero.forecast {
-            return "At current pace, \(forecast.limitText.lowercased()). \(hero.countdown)."
-        }
-        return hero.countdown
-    }
-
-    @ViewBuilder private func forecastView(_ forecast: BurnForecast) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            forecastPills(forecast)
-            Text(forecast.detailText)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
-        .padding(.top, 2)
-    }
-
-    @ViewBuilder private func forecastPills(_ forecast: BurnForecast) -> some View {
-        HStack(spacing: 6) {
-            forecastPill(forecast.rateText,
-                         foreground: Color.secondary,
-                         background: Color.gray.opacity(0.12))
-            forecastPill(forecast.limitText,
-                         foreground: forecast.isUrgent ? Color(nsColor: .systemRed) : Color.secondary,
-                         background: (forecast.isUrgent ? Color(nsColor: .systemRed) : Color.gray).opacity(0.12))
+    /// Colour rides the number as well as the bar, so severity survives colour-blindness
+    /// paired with the digits.
+    private func percentColor(_ color: MeterColor) -> Color {
+        switch color {
+        case .green: return .primary
+        case .amber, .red: return color.swiftUIColor
         }
     }
 
-    @ViewBuilder private func forecastPill(_ text: String,
-                                           foreground: Color,
-                                           background: Color) -> some View {
-        Text(text)
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(foreground)
-            .lineLimit(1)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 4)
-            .background(Capsule().fill(background))
+    @ViewBuilder private func bar(fraction: Double, color: Color) -> some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.gray.opacity(0.22))
+                Capsule()
+                    .fill(color)
+                    // Clamp so an over-100% report cannot render wider than its track.
+                    .frame(width: geo.size.width * min(1, max(0, fraction)))
+            }
+        }
     }
+
+    // MARK: - Supporting
 
     @ViewBuilder private func staleSnapshotView(_ stale: StaleSnapshot) -> some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: 7) {
             Image(systemName: "exclamationmark.circle.fill")
                 .foregroundStyle(Color(nsColor: .systemOrange))
-                .font(.system(size: 14, weight: .semibold))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(stale.title)
-                    .font(.caption.weight(.semibold))
+                .font(.system(size: 11, weight: .semibold))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(stale.title).font(.caption2.weight(.semibold))
                 Text(stale.detail)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -204,38 +259,30 @@ struct PopoverView: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(9)
+        .padding(7)
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .fill(Color(nsColor: .systemOrange).opacity(0.10))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color(nsColor: .systemOrange).opacity(0.24), lineWidth: 1)
         )
     }
 
     @ViewBuilder private func spendView(_ spend: Spend) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text("Spend").font(.subheadline)
-                Spacer()
-                Text(Self.money(spend.amount, currency: spend.currency)
-                     + (spend.limit.map { " / " + Self.money($0, currency: spend.currency) } ?? ""))
-                    .font(.subheadline).monospacedDigit()
-            }
+        HStack(spacing: 9) {
+            Text("Spend").font(.system(size: 12.5))
+            Spacer(minLength: 4)
             if let percent = spend.percent {
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 3).fill(Color.gray.opacity(0.2))
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(usageColor(percent: percent).swiftUIColor)
-                            .frame(width: geo.size.width * min(1, max(0, percent / 100)))
-                    }
-                }
-                .frame(height: 6)
+                bar(fraction: percent / 100, color: usageColor(percent: percent).swiftUIColor)
+                    .frame(width: Metrics.barWidth, height: Metrics.barHeight)
+            } else {
+                Color.clear.frame(width: Metrics.barWidth, height: Metrics.barHeight)
             }
+            Text(Self.money(spend.amount, currency: spend.currency)
+                 + (spend.limit.map { " / " + Self.money($0, currency: spend.currency) } ?? ""))
+                .font(.system(size: 12.5, weight: .semibold))
+                .monospacedDigit()
+                .frame(width: Metrics.percentWidth + Metrics.resetWidth + 9, alignment: .trailing)
         }
+        .padding(.vertical, 4)
     }
 
     private static func money(_ amount: Double, currency: String) -> String {
@@ -258,10 +305,10 @@ struct PopoverView: View {
                 Text("Codex session expired. Open Codex or run `codex login`.").foregroundStyle(.secondary)
             }
         case .rateLimited:
-            Text("Rate limited. Retrying shortly...").foregroundStyle(.secondary)
+            Text("Rate limited. Retrying shortly…").foregroundStyle(.secondary)
         case .network(let message):
             VStack(alignment: .leading, spacing: 2) {
-                Text("Network error. Retrying...").foregroundStyle(.secondary)
+                Text("Network error. Retrying…").foregroundStyle(.secondary)
                 Text(message).font(.caption2).foregroundStyle(.tertiary)
             }
         case .badResponse(let message):
@@ -269,23 +316,6 @@ struct PopoverView: View {
                 Text("Unexpected response from the usage service.").foregroundStyle(.secondary)
                 Text(message).font(.caption2).foregroundStyle(.tertiary)
             }
-        }
-    }
-}
-
-private struct MeterRing: View {
-    let fraction: Double
-    let color: Color
-    let trackColor: Color
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .stroke(trackColor, lineWidth: 9)
-            Circle()
-                .trim(from: 0, to: min(1, max(0, fraction)))
-                .stroke(color, style: StrokeStyle(lineWidth: 9, lineCap: .round))
-                .rotationEffect(.degrees(-90))
         }
     }
 }

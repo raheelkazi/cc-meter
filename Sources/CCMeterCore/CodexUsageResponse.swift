@@ -112,7 +112,7 @@ public struct CodexRateLimitsResponse: Decodable {
                         .trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
                     : nil
                 let name = explicitName ?? fallbackName
-                let label = name.flatMap { $0.isEmpty ? nil : "\(duration) (\($0))" } ?? duration
+                let label = scopedWindowLabel(window: duration, model: name)
                 candidates.append(Candidate(groupID: groupID,
                                             identity: "codex:\(groupID):\(role)",
                                             baseLabel: label,

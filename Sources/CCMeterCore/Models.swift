@@ -1,5 +1,16 @@
 import Foundation
 
+/// The one place a window label gets a model scope appended.
+///
+/// Claude's weekly-scoped windows and Codex's named windows both produce
+/// "<window> · <model>" labels; formatting them separately let the two drift.
+/// A middle dot rather than parentheses so a long model name truncates with an
+/// ellipsis in the popover instead of wrapping the row onto a second line.
+public func scopedWindowLabel(window: String, model: String?) -> String {
+    guard let model, !model.isEmpty else { return window }
+    return "\(window) · \(model)"
+}
+
 public enum WindowKind: Equatable, Codable {
     case session
     case weeklyAll
@@ -10,7 +21,7 @@ public enum WindowKind: Equatable, Codable {
         switch self {
         case .session: return "5-hour"
         case .weeklyAll: return "7-day"
-        case .weeklyScoped(let model): return "7-day (\(model))"
+        case .weeklyScoped(let model): return scopedWindowLabel(window: "7-day", model: model)
         case .named(_, let label, _): return label
         }
     }

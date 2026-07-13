@@ -125,9 +125,9 @@ final class CodexUsageClientTests: XCTestCase {
         let usage = try XCTUnwrap(result.successValue)
 
         XCTAssertEqual(usage.limits.map(\.kind.label), [
-            "5-hour (GPT-5.6-Sol)",
-            "7-day (GPT-5.6-Sol)",
-            "7-day (GPT-5.3-Codex-Spark)"
+            "5-hour · GPT-5.6-Sol",
+            "7-day · GPT-5.6-Sol",
+            "7-day · GPT-5.3-Codex-Spark"
         ])
     }
 
@@ -143,7 +143,7 @@ final class CodexUsageClientTests: XCTestCase {
         let usage = try XCTUnwrap(result.successValue)
 
         XCTAssertEqual(usage.limits.map(\.kind.label), [
-            "5-hour", "7-day", "7-day (GPT-5.3-Codex-Spark)"
+            "5-hour", "7-day", "7-day · GPT-5.3-Codex-Spark"
         ])
     }
 
