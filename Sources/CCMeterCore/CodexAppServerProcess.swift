@@ -3,7 +3,7 @@ import Foundation
 public final class CodexAppServerProcess: CodexAppServerTransport {
     public init() {}
 
-    public func exchange(executable: URL,
+    public func exchange(executable: CodexExecutable,
                          input: Data,
                          responseIDs: Set<Int>,
                          timeout: TimeInterval) async throws -> [Int: Data] {
@@ -20,7 +20,7 @@ public final class CodexAppServerProcess: CodexAppServerTransport {
 }
 
 private final class CodexProcessSession {
-    private let executable: URL
+    private let executable: CodexExecutable
     private let input: Data
     private let responseIDs: Set<Int>
     private let timeout: TimeInterval
@@ -37,7 +37,7 @@ private final class CodexProcessSession {
     private var timeoutWorkItem: DispatchWorkItem?
     private var keepAlive: CodexProcessSession?
 
-    init(executable: URL, input: Data, responseIDs: Set<Int>, timeout: TimeInterval) {
+    init(executable: CodexExecutable, input: Data, responseIDs: Set<Int>, timeout: TimeInterval) {
         self.executable = executable
         self.input = input
         self.responseIDs = responseIDs
@@ -47,8 +47,15 @@ private final class CodexProcessSession {
     func start(completion: @escaping (Result<[Int: Data], Error>) -> Void) {
         keepAlive = self
         self.completion = completion
-        process.executableURL = executable
+        process.executableURL = executable.url
         process.arguments = ["app-server", "--stdio"]
+        // An npm-installed codex is a `#!/usr/bin/env node` script; under launchd our PATH does
+        // not contain node, so the script cannot launch unless we widen the child's PATH.
+        if let searchPath = executable.searchPath {
+            var environment = ProcessInfo.processInfo.environment
+            environment["PATH"] = searchPath
+            process.environment = environment
+        }
         process.standardInput = stdin
         process.standardOutput = stdout
         process.standardError = stderr
