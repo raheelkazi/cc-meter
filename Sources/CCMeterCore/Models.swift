@@ -1,5 +1,35 @@
 import Foundation
 
+/// "GPT-5.3-Codex-Spark" -> "Spark".
+///
+/// The `GPT-5.x` stem repeats on every limit and identifies nothing; the trailing token is
+/// the only part that tells two models apart, and dropping the rest is what lets limits sit
+/// side by side in the popover.
+public func shortModelToken(_ model: String) -> String {
+    model.split(separator: "-").last.map(String.init) ?? model
+}
+
+/// "5-hour" -> "5h", "7-day" -> "7d". Anything unrecognised is left alone.
+public func compactWindowToken(_ window: String) -> String {
+    for (suffix, short) in [("-hour", "h"), ("-day", "d")] {
+        if let range = window.range(of: suffix), range.upperBound == window.endIndex {
+            return String(window[window.startIndex..<range.lowerBound]) + short
+        }
+    }
+    return window
+}
+
+/// "5-hour · GPT-5.6-Sol" -> "5h·Sol".
+///
+/// The window is always kept: Codex reports the same model in more than one window, so a
+/// bare "Sol" would produce two cells that look identical.
+public func compactScopedLabel(_ label: String) -> String {
+    let parts = label.components(separatedBy: " · ")
+    let window = compactWindowToken(parts[0])
+    guard parts.count > 1 else { return window }
+    return "\(window)·\(shortModelToken(parts[1]))"
+}
+
 /// The one place a window label gets a model scope appended.
 ///
 /// Claude's weekly-scoped windows and Codex's named windows both produce
@@ -23,6 +53,19 @@ public enum WindowKind: Equatable, Codable {
         case .weeklyAll: return "7-day"
         case .weeklyScoped(let model): return scopedWindowLabel(window: "7-day", model: model)
         case .named(_, let label, _): return label
+        }
+    }
+
+    /// Short form for the popover's side-by-side cells: "5h", "7d", "7d·Sol".
+    ///
+    /// Only safe to show when it is unique within a provider's limits — see
+    /// `MeterRow.compactLabel`, which falls back to `label` on a collision.
+    public var compactLabel: String {
+        switch self {
+        case .session: return "5h"
+        case .weeklyAll: return "7d"
+        case .weeklyScoped(let model): return "7d·\(shortModelToken(model))"
+        case .named(_, let label, _): return compactScopedLabel(label)
         }
     }
 

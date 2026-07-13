@@ -16,6 +16,8 @@ struct PopoverView: View {
         static let percentWidth: CGFloat = 34
         static let resetWidth: CGFloat = 48
         static let barHeight: CGFloat = 4
+        /// Only a ceiling. The list is content-height until it exceeds this, then scrolls.
+        static let maxListHeight: CGFloat = 420
     }
 
     var body: some View {
@@ -34,7 +36,12 @@ struct PopoverView: View {
                     }
                 }
             }
-            .frame(maxHeight: 420)
+            // A ScrollView is greedy along its scroll axis: given a 420pt ceiling it takes
+            // all 420, which left a long gap under a short list. fixedSize pins it to its
+            // content's height instead, and the ceiling only bites once the list is genuinely
+            // taller than the cap — at which point it scrolls.
+            .frame(maxHeight: Metrics.maxListHeight)
+            .fixedSize(horizontal: false, vertical: true)
 
             footer
         }
@@ -170,54 +177,77 @@ struct PopoverView: View {
             if viewModel.rows.isEmpty {
                 Text("No active limits reported.").font(.caption).foregroundStyle(.secondary)
             } else {
-                // Every limit, in a fixed order. Rows never re-sort by severity: the panel
-                // would rearrange under the cursor between refreshes, and the alert already
-                // does the pointing.
-                ForEach(viewModel.rows) { rowView($0) }
+                limits(viewModel.rows)
+
+                // Forecasts are noise at 3%; they earn a line only when the pace actually
+                // exhausts the window before it resets.
+                ForEach(viewModel.rows.filter(\.burnUrgent)) { row in
+                    if let forecast = row.forecast {
+                        Text("\(row.compactLabel) · \(forecast.detailText)")
+                            .font(.caption2)
+                            .foregroundStyle(Color(nsColor: .systemRed))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
             }
         }
     }
 
-    // MARK: - Row
+    // MARK: - Limits, side by side
 
-    @ViewBuilder private func rowView(_ row: MeterRow) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 9) {
-                Text(row.label)
-                    .font(.system(size: 12.5))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-
-                Spacer(minLength: 4)
-
-                bar(fraction: row.barFraction, color: row.color.swiftUIColor)
-                    .frame(width: Metrics.barWidth, height: Metrics.barHeight)
-
-                Text("\(row.displayPercent)%")
-                    .font(.system(size: 12.5, weight: .semibold))
-                    .monospacedDigit()
-                    .foregroundStyle(percentColor(row.color))
-                    .frame(width: Metrics.percentWidth, alignment: .trailing)
-
-                // "resets in" was identical on every row; only the value ever changed.
-                Text(row.countdownShort)
-                    .font(.system(size: 11))
-                    .monospacedDigit()
-                    .foregroundStyle(.tertiary)
-                    .frame(width: Metrics.resetWidth, alignment: .trailing)
+    /// A provider's limits on one line, divider-separated.
+    ///
+    /// Limits never re-sort by severity: the panel would rearrange under the cursor between
+    /// refreshes, and the alert already does the pointing. If a provider ever reports enough
+    /// windows that one line would overflow, the two-up grid takes over rather than clipping.
+    @ViewBuilder private func limits(_ rows: [MeterRow]) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 0) {
+                ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                    if index > 0 { cellDivider }
+                    cell(row)
+                }
             }
 
-            // Forecasts are noise at 3%; they only earn their line when the pace actually
-            // exhausts the window before it resets.
-            if row.burnUrgent, let forecast = row.forecast {
-                Text(forecast.detailText)
-                    .font(.caption2)
-                    .foregroundStyle(Color(nsColor: .systemRed))
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
+            LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading),
+                                GridItem(.flexible(), alignment: .leading)],
+                      alignment: .leading,
+                      spacing: 3) {
+                ForEach(rows) { cell($0) }
             }
         }
-        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var cellDivider: some View {
+        Rectangle()
+            .fill(Color.secondary.opacity(0.28))
+            .frame(width: 1, height: 11)
+            .padding(.horizontal, 8)
+    }
+
+    @ViewBuilder private func cell(_ row: MeterRow) -> some View {
+        HStack(spacing: 5) {
+            Text(row.compactLabel)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+            // No bar: colour on the number already carries severity, and the bar was 90%
+            // empty track at these values — it was also what pushed the model name off the row.
+            Text("\(row.displayPercent)%")
+                .font(.system(size: 12.5, weight: .bold))
+                .monospacedDigit()
+                .foregroundStyle(percentColor(row.color))
+
+            Text(row.countdownShort)
+                .font(.system(size: 11))
+                .monospacedDigit()
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+        }
+        .padding(.vertical, 3)
+        .help(row.label)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(row.label), \(row.displayPercent) percent, \(row.countdown)")
     }
