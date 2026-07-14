@@ -15,7 +15,14 @@ private final class FakeCredentialStore: CredentialStoring {
         (credentials, rawBlob)
     }
 
-    func write(accessToken: String, refreshToken: String?, expiresAt: Date?) throws {
+    /// When set, the store pretends another process rotated the refresh token under us.
+    var rotatedUnderUs = false
+
+    func write(accessToken: String,
+               refreshToken: String?,
+               expiresAt: Date?,
+               expectedCurrentRefreshToken: String?) throws {
+        if rotatedUnderUs { throw CredentialWriteError.concurrentRotation }
         written = (accessToken, refreshToken, expiresAt)
         credentials = StoredCredentials(accessToken: accessToken,
                                         refreshToken: refreshToken ?? credentials.refreshToken,
@@ -121,4 +128,30 @@ final class TokenRefreshTests: XCTestCase {
         let result = await client.fetch()
         guard case .failure(.unauthorized) = result else { return XCTFail("expected unauthorized fallback") }
     }
+
+    /// The `claude` CLI rotated the refresh token while our refresh was in flight. Our tokens
+    /// are already dead; writing them would invalidate the CLI's live grant and sign the user
+    /// out of Claude Code. Adopt theirs instead.
+    func testConcurrentRotationAdoptsTheOtherProcessesTokenInsteadOfClobberingIt() async throws {
+        let store = FakeCredentialStore(
+            credentials: StoredCredentials(accessToken: "stale", refreshToken: "old", expiresAt: nil)
+        )
+        let transport = SequencedTransport([.success(HTTPResponse(
+            status: 200,
+            data: refreshBody(access: "ours", refresh: "ours-rotated", expiresIn: 3600)
+        ))])
+        let refresher = OAuthTokenRefresher(store: store, transport: transport, now: { self.now })
+
+        // The CLI wins the race: the store rejects our write.
+        store.rotatedUnderUs = true
+        store.credentials = StoredCredentials(accessToken: "theirs-live",
+                                              refreshToken: "theirs-rotated",
+                                              expiresAt: nil)
+
+        let token = try await refresher.refresh()
+
+        XCTAssertEqual(token, "theirs-live", "must adopt the CLI's live token")
+        XCTAssertNil(store.written, "must NOT overwrite the CLI's rotated credentials")
+    }
+
 }

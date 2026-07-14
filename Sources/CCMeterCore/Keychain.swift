@@ -67,35 +67,81 @@ public protocol TokenProviding {
 /// Allow" cannot durably whitelist it and macOS re-prompts on every read. The
 /// `security` tool has a stable Apple identity, so a single "Always Allow"
 /// persists across our rebuilds and every poll.
-public struct KeychainReader {
-    let service: String
-    let account: String
+/// Runs `/usr/bin/security`. A seam, so the credential paths can be tested without touching
+/// the real Keychain — and so every spawn goes through one place that enforces a timeout.
+public protocol KeychainCommandRunning {
+    func run(executable: String, arguments: [String], input: Data?) throws
+        -> (status: Int32, output: Data)
+}
 
-    public init(service: String, account: String) {
-        self.service = service
-        self.account = account
+public struct KeychainCommandProcess: KeychainCommandRunning {
+    private let timeout: TimeInterval
+
+    public init(timeout: TimeInterval = 15) {
+        self.timeout = timeout
     }
 
-    public func readBlob() throws -> Data {
+    public func run(executable: String, arguments: [String], input: Data?) throws
+        -> (status: Int32, output: Data) {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-        process.arguments = ["find-generic-password", "-w", "-s", service, "-a", account]
+        process.executableURL = URL(fileURLWithPath: executable)
+        process.arguments = arguments
         let stdout = Pipe()
         process.standardOutput = stdout
         process.standardError = Pipe()   // suppress "item not found" noise
 
-        do {
-            try process.run()
-        } catch {
-            throw UsageError.noCredentials
+        let stdin = Pipe()
+        if input != nil { process.standardInput = stdin }
+
+        try process.run()
+
+        // Without this a wedged `security` blocks waitUntilExit() forever — and readBlob sits
+        // on the fetch path, so it would hang the meter with no error and no recovery.
+        let watchdog = DispatchWorkItem { [process] in
+            if process.isRunning { process.terminate() }
+        }
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout, execute: watchdog)
+
+        if let input {
+            try? stdin.fileHandleForWriting.write(contentsOf: input)
+            try? stdin.fileHandleForWriting.close()
         }
 
         let data = stdout.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
+        watchdog.cancel()
+
+        return (process.terminationStatus, data)
+    }
+}
+
+public struct KeychainReader {
+    let service: String
+    let account: String
+    let runner: KeychainCommandRunning
+
+    public init(service: String,
+                account: String,
+                runner: KeychainCommandRunning = KeychainCommandProcess()) {
+        self.service = service
+        self.account = account
+        self.runner = runner
+    }
+
+    public func readBlob() throws -> Data {
+        let result: (status: Int32, output: Data)
+        do {
+            result = try runner.run(executable: "/usr/bin/security",
+                                    arguments: ["find-generic-password", "-w",
+                                                "-s", service, "-a", account],
+                                    input: nil)
+        } catch {
+            throw UsageError.noCredentials
+        }
 
         // security prints the password (the JSON blob) with a trailing newline.
-        guard process.terminationStatus == 0,
-              let text = String(data: data, encoding: .utf8)?
+        guard result.status == 0,
+              let text = String(data: result.output, encoding: .utf8)?
                   .trimmingCharacters(in: .whitespacesAndNewlines),
               !text.isEmpty,
               let blob = text.data(using: .utf8) else {
@@ -122,37 +168,60 @@ public struct KeychainTokenProvider: TokenProviding {
 public struct KeychainWriter {
     let service: String
     let account: String
+    let runner: KeychainCommandRunning
 
-    public init(service: String, account: String) {
+    public init(service: String,
+                account: String,
+                runner: KeychainCommandRunning = KeychainCommandProcess()) {
         self.service = service
         self.account = account
+        self.runner = runner
     }
 
     public func writeBlob(_ data: Data) throws {
         guard let text = String(data: data, encoding: .utf8) else {
             throw UsageError.badResponse("credential blob is not valid UTF-8")
         }
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-        process.arguments = ["add-generic-password", "-U", "-s", service, "-a", account, "-w", text]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
+
+        // `-w` with NO value makes security read the password from stdin. Passing it as
+        // `-w <secret>` put the access AND refresh token on the command line, where any
+        // process on the machine could read them out of `ps aux`.
+        //
+        // security prompts and then asks to *retype*, so it needs the secret twice — a single
+        // copy fails with "passwords don't match" and silently stores nothing.
+        let input = Data("\(text)\n\(text)\n".utf8)
+
+        let result: (status: Int32, output: Data)
         do {
-            try process.run()
+            result = try runner.run(executable: "/usr/bin/security",
+                                    arguments: ["add-generic-password", "-U",
+                                                "-s", service, "-a", account, "-w"],
+                                    input: input)
         } catch {
             throw UsageError.badResponse("keychain write failed to launch: \(error.localizedDescription)")
         }
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else {
-            throw UsageError.badResponse("keychain write exited \(process.terminationStatus)")
+
+        guard result.status == 0 else {
+            throw UsageError.badResponse("keychain write exited \(result.status)")
         }
     }
+}
+
+public enum CredentialWriteError: Error, Equatable {
+    /// Another process — the `claude` CLI — rotated the refresh token while we were refreshing.
+    /// Ours is already dead, and writing it would invalidate theirs and sign the user out.
+    case concurrentRotation
 }
 
 /// Reads and writes the whole credential blob, preserving fields we do not own.
 public protocol CredentialStoring {
     func read() throws -> (credentials: StoredCredentials, rawBlob: Data)
-    func write(accessToken: String, refreshToken: String?, expiresAt: Date?) throws
+    /// - Parameter expectedCurrentRefreshToken: the refresh token this update was derived from.
+    ///   The write is abandoned if the stored one no longer matches — see `concurrentRotation`.
+    func write(accessToken: String,
+               refreshToken: String?,
+               expiresAt: Date?,
+               expectedCurrentRefreshToken: String?) throws
 }
 
 public struct KeychainCredentialStore: CredentialStoring {
@@ -169,8 +238,21 @@ public struct KeychainCredentialStore: CredentialStoring {
         return (try parseCredentials(from: blob), blob)
     }
 
-    public func write(accessToken: String, refreshToken: String?, expiresAt: Date?) throws {
+    public func write(accessToken: String,
+                      refreshToken: String?,
+                      expiresAt: Date?,
+                      expectedCurrentRefreshToken: String?) throws {
         let original = try reader.readBlob()
+
+        // Compare-and-swap. We are editing the `claude` CLI's Keychain item, and the CLI
+        // refreshes at the same moment we do — both notice expiry together. Anthropic rotates
+        // the refresh token on use, so a blind read-modify-write clobbers whichever rotation
+        // landed first, invalidating a live refresh token and signing the user out.
+        let current = try? parseCredentials(from: original)
+        guard current?.refreshToken == expectedCurrentRefreshToken else {
+            throw CredentialWriteError.concurrentRotation
+        }
+
         let updated = try updatedBlob(original: original,
                                       accessToken: accessToken,
                                       refreshToken: refreshToken,
