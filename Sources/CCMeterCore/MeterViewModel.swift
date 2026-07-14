@@ -10,22 +10,8 @@ public enum MeterState {
 public enum DisplayMode { case used, remaining }
 
 public struct BurnForecast: Equatable {
-    public let rateText: String
-    public let limitText: String
+    /// "12%/h now vs 5%/h safe" — the only forecast string the popover renders.
     public let detailText: String
-    public let isUrgent: Bool
-}
-
-public struct MeterHero: Equatable {
-    public let label: String
-    public let percent: Int
-    public let fraction: Double
-    public let color: MeterColor
-    public let status: String
-    public let countdown: String
-    public let burn: String?
-    public let burnUrgent: Bool
-    public let forecast: BurnForecast?
 }
 
 public struct StaleSnapshot: Equatable {
@@ -39,21 +25,16 @@ public struct MeterRow: Identifiable {
     /// Short form for the side-by-side cells ("7d·Sol"), or the full `label` when shortening
     /// would collide with another limit and make the two indistinguishable.
     public let compactLabel: String
-    public let isPromoted: Bool
     /// What the row shows, which flips with the Used/Left toggle.
     public let displayPercent: Int
     /// How full the window actually is. Severity is ranked on this, never on
     /// `displayPercent` — 6% *left* is still critical, and must stay critical.
     public let usedPercent: Int
-    public let barFraction: Double
     public let color: MeterColor
     /// "resets in 5d 17h" — for prose contexts.
     public let countdown: String
     /// "5d 17h" — for the popover's reset column.
     public let countdownShort: String
-    /// Time-to-exhaustion projection, e.g. "~40m to limit", or nil when the pace
-    /// is flat/insufficient to project.
-    public let burn: String?
     /// True when the projection exhausts the window before it resets (worth emphasis).
     public let burnUrgent: Bool
     /// Current burn rate and projected exhaustion/reset outcome.
@@ -265,56 +246,11 @@ public final class MeterViewModel: ObservableObject {
         return summarize(top)
     }
 
-    public var hero: MeterHero? {
-        guard let top = mostConstrainedLimit() else { return nil }
-        let clock = now()
-        let used = summarize(top)
-        let samples = currentWindowSamples(for: top, identity: top.kind.identity)
-        let projection = burnProjection(samples: samples.filter { $0.at >= clock.addingTimeInterval(-burnWindow) },
-                                        currentPercent: top.percent,
-                                        resetsAt: top.resetsAt,
-                                        now: clock)
-        return MeterHero(label: top.kind.label,
-                         percent: used.percent,
-                         fraction: min(1, max(0, top.percent / 100.0)),
-                         color: used.color,
-                         status: heroStatus(label: top.kind.label,
-                                            color: used.color,
-                                            burnUrgent: projection?.willExhaustBeforeReset ?? false),
-                         countdown: countdownText(to: top.resetsAt, now: clock),
-                         burn: projection.map(burnText),
-                         burnUrgent: projection?.willExhaustBeforeReset ?? false,
-                         forecast: projection.flatMap {
-                             burnForecast(projection: $0,
-                                          currentPercent: top.percent,
-                                          resetsAt: top.resetsAt,
-                                          now: clock)
-                         })
-    }
-
     private func mostConstrainedLimit() -> UsageLimit? {
         guard case .ok(let usage) = state else { return nil }
-        return mostConstrainedIndexedLimit(in: usage)?.limit
-    }
-
-    private func mostConstrainedIndexedLimit(in usage: Usage) -> (index: Int, limit: UsageLimit)? {
-        let indexed = usage.limits.enumerated().map { (index: $0.offset, limit: $0.element) }
-        let active = indexed.filter { $0.limit.isActive }
-        let pool = active.isEmpty ? indexed : active
-        return pool.max(by: { $0.limit.percent < $1.limit.percent })
-    }
-
-    public var detailRows: [MeterRow] {
-        rows.filter { !$0.isPromoted }
-    }
-
-    private func heroStatus(label: String, color: MeterColor, burnUrgent: Bool) -> String {
-        if burnUrgent { return "\(label) may run out early" }
-        switch color {
-        case .green: return "\(label) has room"
-        case .amber: return "\(label) is warm"
-        case .red: return "\(label) is nearly full"
-        }
+        let active = usage.limits.filter(\.isActive)
+        let pool = active.isEmpty ? usage.limits : active
+        return pool.max(by: { $0.percent < $1.percent })
     }
 
     /// Spend/extra-credit info from the last successful fetch, if the endpoint
@@ -328,7 +264,6 @@ public final class MeterViewModel: ObservableObject {
         guard case .ok(let usage) = state else { return [] }
         let mode = displayMode
         let clock = now()
-        let promotedIndex = mostConstrainedIndexedLimit(in: usage)?.index
 
         // Shortening a label is the one thing here that can destroy information: two limits
         // that compact to the same cell would be indistinguishable. When that happens, the
@@ -355,14 +290,11 @@ public final class MeterViewModel: ObservableObject {
             return MeterRow(id: "\(index)-\(limit.kind.identity)",
                             label: label,
                             compactLabel: isUnique ? compact : label,
-                            isPromoted: index == promotedIndex,
                             displayPercent: displayPercent,
                             usedPercent: used.percent,
-                            barFraction: Double(displayPercent) / 100.0,
                             color: used.color,
                             countdown: countdownText(to: limit.resetsAt, now: clock),
                             countdownShort: countdownValue(to: limit.resetsAt, now: clock),
-                            burn: projection.map(burnText),
                             burnUrgent: projection?.willExhaustBeforeReset ?? false,
                             forecast: projection.flatMap {
                                 burnForecast(projection: $0,
@@ -393,13 +325,9 @@ public final class MeterViewModel: ObservableObject {
         let hoursUntilReset = resetsAt.timeIntervalSince(now) / 3600.0
         guard hoursUntilReset > 0 else { return nil }
         let safeRate = max(0, (100 - currentPercent) / hoursUntilReset)
-        let limitText = projection.willExhaustBeforeReset
-            ? "Limit in \(Self.durationText(projection.timeToLimit))"
-            : "Reset comes first"
-        return BurnForecast(rateText: "\(Self.rateText(projection.ratePerHour)) burn",
-                            limitText: limitText,
-                            detailText: "\(Self.rateText(projection.ratePerHour)) now vs \(Self.rateText(safeRate)) safe",
-                            isUrgent: projection.willExhaustBeforeReset)
+        return BurnForecast(
+            detailText: "\(Self.rateText(projection.ratePerHour)) now vs \(Self.rateText(safeRate)) safe"
+        )
     }
 
     private static func rateText(_ rate: Double) -> String {

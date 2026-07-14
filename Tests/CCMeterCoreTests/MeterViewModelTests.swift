@@ -55,18 +55,6 @@ final class MeterViewModelTests: XCTestCase {
         XCTAssertEqual(vm.compact?.percent, 54)   // active Fable window
     }
 
-    func testHeroUsesMostConstrainedActiveLimit() async {
-        let vm = MeterViewModel(client: StubClient(.success(sampleUsage())),
-                                interval: 30, now: { self.now })
-        vm.displayMode = .remaining
-        await vm.refresh()
-        XCTAssertEqual(vm.hero?.label, "7-day · Fable")
-        XCTAssertEqual(vm.hero?.percent, 54)       // always used percent, not remaining-mode display
-        XCTAssertEqual(vm.hero?.status, "7-day · Fable is warm")
-        XCTAssertEqual(vm.detailRows.map(\.label), ["5-hour", "7-day"])
-        XCTAssertEqual(vm.rows.filter(\.isPromoted).map(\.label), ["7-day · Fable"])
-    }
-
     func testRemainingModeInvertsPercent() async {
         let vm = MeterViewModel(client: StubClient(.success(sampleUsage())),
                                 interval: 30, now: { self.now })
@@ -353,11 +341,8 @@ final class MeterViewModelTests: XCTestCase {
         let vm = MeterViewModel(client: StubClient(.success(usage)),
                                 history: history, now: { self.now })
         await vm.refresh()
-        XCTAssertNotNil(vm.rows.first?.burn)
-        XCTAssertEqual(vm.rows.first?.forecast?.rateText, "+20%/h burn")
-        XCTAssertEqual(vm.rows.first?.forecast?.limitText, "Limit in 2h 0m")
         XCTAssertEqual(vm.rows.first?.forecast?.detailText, "+20%/h now vs +4.0%/h safe")
-        XCTAssertTrue(vm.rows.first?.forecast?.isUrgent ?? false)
+        XCTAssertTrue(vm.rows.first?.burnUrgent ?? false, "on pace to exhaust before reset")
     }
 
     func testBurnForecastIgnoresPriorWindowSamples() async {
@@ -379,8 +364,8 @@ final class MeterViewModelTests: XCTestCase {
         await vm.refresh()
         // Only the single new-window sample counts: no false projection from the
         // old steep climb.
-        XCTAssertNil(vm.rows.first?.burn)
         XCTAssertNil(vm.rows.first?.forecast)
+        XCTAssertFalse(vm.rows.first?.burnUrgent ?? true)
     }
 
     func testBurnForecastToleratesPriorSampleResetJitter() async {
@@ -403,8 +388,9 @@ final class MeterViewModelTests: XCTestCase {
         let vm = MeterViewModel(client: StubClient(.success(usage)),
                                 history: history, now: { self.now })
         await vm.refresh()
-        XCTAssertEqual(vm.rows.first?.forecast?.rateText, "+20%/h burn")
-        XCTAssertNotNil(vm.rows.first?.forecast)
+        // Every jittered sample still counts, so the slope is the full +20%/h. (Safe rate is
+        // 8.0%/h here, not 4.0: this window resets in 5h, not 10.)
+        XCTAssertEqual(vm.rows.first?.forecast?.detailText, "+20%/h now vs +8.0%/h safe")
     }
 
     func testApplyFlipsDisplayModeWhenDefaultChanges() {
