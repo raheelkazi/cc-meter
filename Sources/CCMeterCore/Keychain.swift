@@ -67,84 +67,47 @@ public protocol TokenProviding {
 /// Allow" cannot durably whitelist it and macOS re-prompts on every read. The
 /// `security` tool has a stable Apple identity, so a single "Always Allow"
 /// persists across our rebuilds and every poll.
-/// Runs `/usr/bin/security`. A seam, so the credential paths can be tested without touching
-/// the real Keychain — and so every spawn goes through one place that enforces a timeout.
-public protocol KeychainCommandRunning {
-    func run(executable: String, arguments: [String], input: Data?) throws
-        -> (status: Int32, output: Data)
-}
+/// The `security` invocations. Kept together so the reader and the writer cannot drift apart on
+/// the service/account they address.
+enum SecurityCommand {
+    static let executable = "/usr/bin/security"
 
-public struct KeychainCommandProcess: KeychainCommandRunning {
-    private let timeout: TimeInterval
-
-    public init(timeout: TimeInterval = 15) {
-        self.timeout = timeout
+    static func read(service: String, account: String) -> Command {
+        Command(executable: executable,
+                arguments: ["find-generic-password", "-w", "-s", service, "-a", account])
     }
 
-    public func run(executable: String, arguments: [String], input: Data?) throws
-        -> (status: Int32, output: Data) {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: executable)
-        process.arguments = arguments
-        let stdout = Pipe()
-        process.standardOutput = stdout
-        process.standardError = Pipe()   // suppress "item not found" noise
-
-        let stdin = Pipe()
-        if input != nil { process.standardInput = stdin }
-
-        try process.run()
-
-        // Without this a wedged `security` blocks waitUntilExit() forever — and readBlob sits
-        // on the fetch path, so it would hang the meter with no error and no recovery.
-        let watchdog = DispatchWorkItem { [process] in
-            if process.isRunning { process.terminate() }
-        }
-        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout, execute: watchdog)
-
-        if let input {
-            try? stdin.fileHandleForWriting.write(contentsOf: input)
-            try? stdin.fileHandleForWriting.close()
-        }
-
-        let data = stdout.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        watchdog.cancel()
-
-        return (process.terminationStatus, data)
+    static func write(service: String, account: String, secret: Data) -> Command {
+        Command(executable: executable,
+                arguments: ["add-generic-password", "-U", "-s", service, "-a", account, "-w"],
+                input: secret)
     }
 }
 
 public struct KeychainReader {
     let service: String
     let account: String
-    let runner: KeychainCommandRunning
+    let runner: CommandRunning
 
     public init(service: String,
                 account: String,
-                runner: KeychainCommandRunning = KeychainCommandProcess()) {
+                runner: CommandRunning = SystemCommandRunner()) {
         self.service = service
         self.account = account
         self.runner = runner
     }
 
     public func readBlob() throws -> Data {
-        let result: (status: Int32, output: Data)
+        let result: CommandResult
         do {
-            result = try runner.run(executable: "/usr/bin/security",
-                                    arguments: ["find-generic-password", "-w",
-                                                "-s", service, "-a", account],
-                                    input: nil)
+            result = try runner.run(SecurityCommand.read(service: service, account: account))
         } catch {
             throw UsageError.noCredentials
         }
 
         // security prints the password (the JSON blob) with a trailing newline.
-        guard result.status == 0,
-              let text = String(data: result.output, encoding: .utf8)?
-                  .trimmingCharacters(in: .whitespacesAndNewlines),
-              !text.isEmpty,
-              let blob = text.data(using: .utf8) else {
+        let text = result.standardOutputText
+        guard result.isSuccess, !text.isEmpty, let blob = text.data(using: .utf8) else {
             throw UsageError.noCredentials
         }
         return blob
@@ -168,11 +131,11 @@ public struct KeychainTokenProvider: TokenProviding {
 public struct KeychainWriter {
     let service: String
     let account: String
-    let runner: KeychainCommandRunning
+    let runner: CommandRunning
 
     public init(service: String,
                 account: String,
-                runner: KeychainCommandRunning = KeychainCommandProcess()) {
+                runner: CommandRunning = SystemCommandRunner()) {
         self.service = service
         self.account = account
         self.runner = runner
@@ -189,20 +152,20 @@ public struct KeychainWriter {
         //
         // security prompts and then asks to *retype*, so it needs the secret twice — a single
         // copy fails with "passwords don't match" and silently stores nothing.
-        let input = Data("\(text)\n\(text)\n".utf8)
+        let secret = Data("\(text)\n\(text)\n".utf8)
 
-        let result: (status: Int32, output: Data)
+        let result: CommandResult
         do {
-            result = try runner.run(executable: "/usr/bin/security",
-                                    arguments: ["add-generic-password", "-U",
-                                                "-s", service, "-a", account, "-w"],
-                                    input: input)
+            result = try runner.run(
+                SecurityCommand.write(service: service, account: account, secret: secret)
+            )
         } catch {
             throw UsageError.badResponse("keychain write failed to launch: \(error.localizedDescription)")
         }
 
-        guard result.status == 0 else {
-            throw UsageError.badResponse("keychain write exited \(result.status)")
+        guard result.isSuccess else {
+            // security explains itself on stderr; the bare exit code alone never diagnosed anything.
+            throw UsageError.badResponse("keychain write \(result.failureDescription)")
         }
     }
 }

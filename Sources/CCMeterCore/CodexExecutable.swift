@@ -35,13 +35,17 @@ public final class LoginShellPath: LoginShellPathProviding {
 
     private let shell: String
     private let timeout: TimeInterval
+    private let runner: CommandRunning
     private let lock = NSLock()
     /// Outer `nil` means "not read yet"; inner `nil` means "read, and unavailable".
     private var cached: String??
 
-    public init(shell: String? = nil, timeout: TimeInterval = 5) {
+    public init(shell: String? = nil,
+                timeout: TimeInterval = 5,
+                runner: CommandRunning = SystemCommandRunner()) {
         self.shell = shell ?? ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
         self.timeout = timeout
+        self.runner = runner
     }
 
     public func loginShellPath() -> String? {
@@ -61,35 +65,15 @@ public final class LoginShellPath: LoginShellPathProviding {
     }
 
     private func readFromLoginShell() -> String? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: shell)
-        process.arguments = [
-            "-i", "-l", "-c",
-            "printf '\(Self.startMarker)%s\(Self.endMarker)' \"$PATH\""
-        ]
-        let output = Pipe()
-        process.standardOutput = output
-        process.standardError = Pipe()
+        let command = Command(
+            executable: shell,
+            arguments: ["-i", "-l", "-c",
+                        "printf '\(Self.startMarker)%s\(Self.endMarker)' \"$PATH\""],
+            timeout: timeout
+        )
 
-        do {
-            try process.run()
-        } catch {
-            return nil
-        }
-
-        let watchdog = DispatchWorkItem { [process] in
-            if process.isRunning { process.terminate() }
-        }
-        DispatchQueue.global(qos: .utility)
-            .asyncAfter(deadline: .now() + timeout, execute: watchdog)
-
-        let data = output.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        watchdog.cancel()
-
-        guard process.terminationStatus == 0,
-              let text = String(data: data, encoding: .utf8) else { return nil }
-        return Self.extractPath(from: text)
+        guard let result = try? runner.run(command), result.isSuccess else { return nil }
+        return Self.extractPath(from: result.standardOutputText)
     }
 
     private static func extractPath(from text: String) -> String? {

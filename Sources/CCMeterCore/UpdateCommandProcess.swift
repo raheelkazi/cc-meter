@@ -144,6 +144,10 @@ private final class ProcessSession {
         self.completion = nil
         timeoutWorkItem = self.timeoutWorkItem
         self.timeoutWorkItem = nil
+        // Held on the stack until the frame ends. `retainedSelf` is our only strong reference, so
+        // clearing the ivar here — with the lock still held and teardown still to come — can
+        // deallocate `self` out from under the rest of this function.
+        let retained = retainedSelf
         retainedSelf = nil
         lock.unlock()
 
@@ -154,5 +158,6 @@ private final class ProcessSession {
             process.terminate()
         }
         completion?(result)
+        withExtendedLifetime(retained) {}
     }
 }
