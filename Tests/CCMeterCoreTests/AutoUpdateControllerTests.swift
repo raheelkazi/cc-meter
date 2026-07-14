@@ -241,6 +241,21 @@ final class AutoUpdateControllerTests: XCTestCase {
         )
     }
 
+
+    /// A clock briefly running ahead (NTP correction after sleep) persists a FUTURE lastAttempt
+    /// to UserDefaults. Once the clock corrects, `now - last` is negative — forever less than
+    /// the 24h throttle — so the scheduled check never runs again, surviving restarts.
+    func testAFutureLastAttemptDoesNotDisableUpdatesForever() async {
+        let fixture = makeController(outcome: .upToDate,
+                                     lastAttempt: now.addingTimeInterval(365 * 86400))
+        fixture.controller.start(enabled: true)
+
+        await fixture.controller.runDueCheck()
+
+        XCTAssertEqual(fixture.updater.callCount, 1,
+                       "a lastAttempt in the future must not wedge the updater permanently")
+    }
+
     private func makeController(
         updater: TestUpdater,
         lastAttempt: Date? = nil

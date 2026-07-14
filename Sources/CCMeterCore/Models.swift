@@ -93,7 +93,11 @@ public struct UsageLimit: Equatable, Codable {
 
     public init(kind: WindowKind, percent: Double, resetsAt: Date, isActive: Bool) {
         self.kind = kind
-        self.percent = percent
+        // Clamped once, at the boundary. A limit can report overage (>100), and "Left" mode
+        // computes 100 - used — so an unclamped 104 rendered as "-4%" in the popover, and
+        // VoiceOver read it as "minus 4 percent". Three render sites were each clamping (or
+        // forgetting to); the wire is the right place to do it.
+        self.percent = min(100, max(0, percent))
         self.resetsAt = resetsAt
         self.isActive = isActive
     }

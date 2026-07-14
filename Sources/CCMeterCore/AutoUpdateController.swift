@@ -130,8 +130,12 @@ public final class AutoUpdateController: AutomaticUpdateControlling {
     public func runDueCheck() async {
         guard enabled, updater.isSupported, !isChecking else { return }
         let attemptedAt = now()
+        // abs(), because a clock that briefly ran ahead (an NTP correction after sleep) persists
+        // a FUTURE lastAttempt to UserDefaults. Once the clock corrects, the difference is
+        // negative — forever less than the throttle — and the updater would never run again,
+        // surviving restarts and reinstalls, with no symptom but "Not checked yet".
         if let last = attemptStore.lastAttempt,
-           attemptedAt.timeIntervalSince(last) < Self.minimumAttemptInterval {
+           abs(attemptedAt.timeIntervalSince(last)) < Self.minimumAttemptInterval {
             return
         }
 
