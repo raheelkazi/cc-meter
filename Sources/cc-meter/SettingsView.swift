@@ -12,15 +12,32 @@ import CCMeterCore
 /// ourselves with styled "cards".
 struct SettingsView: View {
     @State private var prefs: Preferences
+    @ObservedObject private var updates: AutoUpdateController
+    @State private var isChecking = false
     private let onChange: (Preferences) -> Void
 
     /// Threshold seams offered as toggles; arbitrary values are preserved if
     /// already stored but the common ones are one click away.
     private static let candidateThresholds: [Double] = [50, 80, 90, 95, 100]
 
-    init(initial: Preferences, onChange: @escaping (Preferences) -> Void) {
+    init(initial: Preferences,
+         onChange: @escaping (Preferences) -> Void,
+         updates: AutoUpdateController) {
         _prefs = State(initialValue: initial)
         self.onChange = onChange
+        self.updates = updates
+    }
+
+    /// A failure is the one status worth colouring; the rest are ordinary.
+    private var statusColor: Color {
+        if case .failed = updates.status { return Color(nsColor: .systemRed) }
+        return .secondary
+    }
+
+    /// Nothing to check outside a Homebrew service install, so say so rather than offer a
+    /// button that would quietly do nothing.
+    private var isCheckable: Bool {
+        updates.status != .unsupported
     }
 
     var body: some View {
@@ -72,9 +89,26 @@ struct SettingsView: View {
                 card("Updates") {
                     Toggle("Automatically install cc-meter updates",
                            isOn: $prefs.automaticUpdatesEnabled)
-                    Text("Available for Homebrew service installations.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+
+                    HStack {
+                        // The updater used to run daily and say nothing, so a silently failing
+                        // updater looked exactly like a working one. Now it reports.
+                        Text(updates.status.summary(now: Date()))
+                            .font(.caption)
+                            .foregroundStyle(statusColor)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Spacer(minLength: 8)
+
+                        Button("Check Now") {
+                            isChecking = true
+                            Task {
+                                await updates.checkNow()
+                                isChecking = false
+                            }
+                        }
+                        .disabled(isChecking || !isCheckable)
+                    }
                 }
 
                 card("Startup") {

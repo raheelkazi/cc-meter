@@ -239,12 +239,7 @@ public final class MeterViewModel: ObservableObject {
     /// (shown after a transient failure) is visibly dated rather than silently old.
     public var lastUpdatedText: String? {
         guard let lastUpdated else { return nil }
-        let secs = Int(now().timeIntervalSince(lastUpdated))
-        if secs < 10 { return "updated just now" }
-        if secs < 60 { return "updated \(secs)s ago" }
-        let mins = secs / 60
-        if mins < 60 { return "updated \(mins)m ago" }
-        return "updated \(mins / 60)h ago"
+        return "updated \(relativeTimeText(since: lastUpdated, now: now()))"
     }
 
     /// Rounds a limit's used percent and colors it by usage level. Shared by the

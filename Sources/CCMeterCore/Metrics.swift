@@ -30,6 +30,19 @@ public func isSameWindow(_ lhs: Date,
     abs(lhs.timeIntervalSince(rhs)) < tolerance
 }
 
+/// "just now", "42s ago", "9m ago", "3h ago".
+///
+/// Shared by the popover's "updated …" cue and Settings' "checked …" cue, so the two cannot
+/// drift into different phrasings of the same idea.
+public func relativeTimeText(since date: Date, now: Date) -> String {
+    let secs = Int(now.timeIntervalSince(date))
+    if secs < 10 { return "just now" }
+    if secs < 60 { return "\(secs)s ago" }
+    let mins = secs / 60
+    if mins < 60 { return "\(mins)m ago" }
+    return "\(mins / 60)h ago"
+}
+
 /// Bare time to reset, e.g. "2d 3h", "42m". The popover shows this as a right-aligned
 /// column, where the "resets in" prefix would be identical on every row and so carries
 /// no information.

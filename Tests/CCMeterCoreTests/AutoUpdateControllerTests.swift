@@ -254,6 +254,81 @@ final class AutoUpdateControllerTests: XCTestCase {
 
         XCTAssertEqual(fixture.updater.callCount, 1,
                        "a lastAttempt in the future must not wedge the updater permanently")
+    // MARK: - Manual "Check Now"
+    //
+    // The updater was invisible: it ran daily and reported nothing, so a silently failing
+    // updater looked exactly like a working one. Settings now shows status and can check
+    // on demand.
+    }
+
+    func testCheckNowRunsEvenWhenAutomaticUpdatesAreDisabled() async {
+        let fixture = makeController(outcome: .upToDate)
+        fixture.controller.start(enabled: false)
+
+        await fixture.controller.checkNow()
+
+        XCTAssertEqual(fixture.updater.callCount, 1,
+                       "an explicit request must run even with auto-updates off")
+    }
+
+    /// The daily throttle exists to stop the *scheduled* check hammering Homebrew. A person
+    /// who clicks the button is asking now, and must not be silently ignored.
+    func testCheckNowIgnoresTheOncePerDayThrottle() async {
+        let fixture = makeController(outcome: .upToDate, lastAttempt: now)
+        fixture.controller.start(enabled: true)
+
+        await fixture.controller.runDueCheck()
+        XCTAssertEqual(fixture.updater.callCount, 0, "scheduled check is throttled")
+
+        await fixture.controller.checkNow()
+        XCTAssertEqual(fixture.updater.callCount, 1, "the manual check is not")
+    }
+
+    func testStatusReportsUpToDateWithTheTimeItChecked() async {
+        let fixture = makeController(outcome: .upToDate)
+
+        await fixture.controller.checkNow()
+
+        XCTAssertEqual(fixture.controller.status, .upToDate(at: now))
+    }
+
+    func testStatusReportsFailureAndStillLogsIt() async {
+        let failure = UpdateFailure(stage: .upgrade, detail: "boom")
+        let fixture = makeController(outcome: .failed(failure))
+
+        await fixture.controller.checkNow()
+
+        XCTAssertEqual(fixture.controller.status, .failed(failure, at: now))
+        XCTAssertEqual(fixture.logger.failures.count, 1, "a manual failure is still written to the log")
+    }
+
+    /// The Homebrew service is `keep_alive successful_exit: false`, so exiting non-zero is
+    /// how the app relaunches itself into the newly installed binary.
+    func testUpdatedStatusRestartsTheApp() async {
+        let fixture = makeController(outcome: .updated)
+
+        await fixture.controller.checkNow()
+
+        XCTAssertEqual(fixture.controller.status, .updated(at: now))
+        XCTAssertEqual(fixture.exitStatuses, [AutoUpdateController.restartExitStatus])
+    }
+
+    func testStatusIsUnsupportedOutsideAHomebrewServiceInstall() async {
+        let fixture = makeController(outcome: .unsupported, isSupported: false)
+
+        await fixture.controller.checkNow()
+
+        XCTAssertEqual(fixture.controller.status, .unsupported)
+        XCTAssertEqual(fixture.updater.callCount, 0,
+                       "a dev build must say so rather than pretend to check")
+    }
+
+    func testCheckNowRecordsTheAttemptSoTheDailyCheckDoesNotImmediatelyRepeatIt() async {
+        let fixture = makeController(outcome: .upToDate)
+
+        await fixture.controller.checkNow()
+
+        XCTAssertEqual(fixture.attemptStore.lastAttempt, now)
     }
 
     private func makeController(
