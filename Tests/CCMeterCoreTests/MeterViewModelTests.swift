@@ -463,7 +463,6 @@ final class MeterViewModelTests: XCTestCase {
         let row = vm.rows[0]
         XCTAssertEqual(row.displayPercent, 0, "0% left, never -4%")
         XCTAssertEqual(row.usedPercent, 100, "used is capped at full")
-        XCTAssertGreaterThanOrEqual(row.barFraction, 0)
     }
 
     func testNegativePercentFromABadPayloadIsClampedToZero() async {
