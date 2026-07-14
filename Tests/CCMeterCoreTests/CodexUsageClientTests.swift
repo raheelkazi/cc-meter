@@ -3,19 +3,21 @@ import XCTest
 
 private struct StubCodexResolver: CodexExecutableResolving {
     let url: URL?
-    func resolve() -> URL? { url }
+    func resolve() -> CodexExecutable? {
+        url.map { CodexExecutable(url: $0, searchPath: nil) }
+    }
 }
 
 private final class StubCodexTransport: CodexAppServerTransport {
     var result: Result<[Int: Data], Error>
-    private(set) var executable: URL?
+    private(set) var executable: CodexExecutable?
     private(set) var input: Data?
     private(set) var responseIDs: Set<Int>?
     private(set) var timeout: TimeInterval?
 
     init(_ result: Result<[Int: Data], Error>) { self.result = result }
 
-    func exchange(executable: URL, input: Data,
+    func exchange(executable: CodexExecutable, input: Data,
                   responseIDs: Set<Int>, timeout: TimeInterval) async throws -> [Int: Data] {
         self.executable = executable
         self.input = input
@@ -53,7 +55,7 @@ final class CodexUsageClientTests: XCTestCase {
         let (client, transport) = client()
         _ = await client.fetch()
 
-        XCTAssertEqual(transport.executable, executable)
+        XCTAssertEqual(transport.executable?.url, executable)
         XCTAssertEqual(transport.responseIDs, [2, 3, 4])
         XCTAssertEqual(transport.timeout, 4)
         let lines = String(data: transport.input!, encoding: .utf8)!
@@ -158,14 +160,16 @@ final class CodexUsageClientTests: XCTestCase {
         try FileManager.default.setAttributes([.posixPermissions: 0o755],
                                               ofItemAtPath: executable.path)
 
-        XCTAssertEqual(CodexExecutableResolver(candidates: [missing, executable]).resolve(), executable)
+        XCTAssertEqual(CodexExecutableResolver(candidates: [missing, executable]).resolve()?.url,
+                       executable)
     }
 
     func testProcessTransportHandlesExecutableThatExitsImmediately() async {
         let transport = CodexAppServerProcess()
         do {
             _ = try await transport.exchange(
-                executable: URL(fileURLWithPath: "/usr/bin/false"),
+                executable: CodexExecutable(url: URL(fileURLWithPath: "/usr/bin/false"),
+                                            searchPath: nil),
                 input: Data(repeating: 0x78, count: 64 * 1024),
                 responseIDs: [2, 3, 4],
                 timeout: 2
@@ -196,7 +200,7 @@ final class CodexUsageClientTests: XCTestCase {
                                               ofItemAtPath: executable.path)
 
         let responses = try await CodexAppServerProcess().exchange(
-            executable: executable,
+            executable: CodexExecutable(url: executable, searchPath: nil),
             input: Data("requests\\n".utf8),
             responseIDs: [2, 3, 4],
             timeout: 2
@@ -205,6 +209,64 @@ final class CodexUsageClientTests: XCTestCase {
         XCTAssertEqual(Set(responses.keys), [2, 3, 4])
         XCTAssertTrue(String(data: responses[2]!, encoding: .utf8)!.contains("rateLimits"))
         XCTAssertTrue(String(data: responses[4]!, encoding: .utf8)!.contains("data"))
+    }
+
+    /// npm ships codex as a `#!/usr/bin/env node` script, so launching it requires its
+    /// interpreter on the child's PATH. Under launchd, cc-meter's PATH is only
+    /// /usr/bin:/bin:/usr/sbin:/sbin — which is why Codex silently never appeared.
+    private func makeShebangCodex() throws -> (directory: URL, codex: URL) {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cc-meter-codex-shebang-\(UUID().uuidString)")
+            .resolvingSymlinksInPath()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        let interpreter = directory.appendingPathComponent("fakenode")
+        let script = """
+        #!/bin/sh
+        printf '%s\\n' '{"id":2,"result":{"rateLimits":null}}' '{"id":3,"result":{"config":{}}}' '{"id":4,"result":{"data":[]}}'
+        sleep 1
+        """
+        try Data(script.utf8).write(to: interpreter)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755],
+                                              ofItemAtPath: interpreter.path)
+
+        let codex = directory.appendingPathComponent("codex")
+        try Data("#!/usr/bin/env fakenode\n".utf8).write(to: codex)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755],
+                                              ofItemAtPath: codex.path)
+        return (directory, codex)
+    }
+
+    func testProcessTransportLaunchesShebangExecutableUsingSearchPath() async throws {
+        let (directory, codex) = try makeShebangCodex()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let responses = try await CodexAppServerProcess().exchange(
+            executable: CodexExecutable(url: codex,
+                                        searchPath: "\(directory.path):/usr/bin:/bin"),
+            input: Data("requests\n".utf8),
+            responseIDs: [2, 3, 4],
+            timeout: 5
+        )
+
+        XCTAssertEqual(Set(responses.keys), [2, 3, 4])
+    }
+
+    func testProcessTransportFailsWhenInterpreterIsNotOnSearchPath() async throws {
+        let (directory, codex) = try makeShebangCodex()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        do {
+            _ = try await CodexAppServerProcess().exchange(
+                executable: CodexExecutable(url: codex, searchPath: "/usr/bin:/bin"),
+                input: Data("requests\n".utf8),
+                responseIDs: [2, 3, 4],
+                timeout: 5
+            )
+            XCTFail("expected launch to fail when the interpreter is off the search path")
+        } catch is CodexTransportError {
+            // Expected: this is the production failure the search path fixes.
+        }
     }
 }
 
