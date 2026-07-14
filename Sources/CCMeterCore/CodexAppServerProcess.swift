@@ -83,7 +83,14 @@ private final class CodexProcessSession {
         let timeoutWorkItem = DispatchWorkItem { [weak self] in
             self?.finish(.failure(CodexTransportError.timeout))
         }
+        // Under the lock: process.run() has already returned, so the readability and termination
+        // handlers can be calling finish() on another queue right now, and finish() reads both of
+        // these. The window is nanoseconds and no child can answer that fast, so this has never
+        // fired — but "the child is too slow to hit it" is not synchronisation.
+        lock.lock()
         self.timeoutWorkItem = timeoutWorkItem
+        lock.unlock()
+
         DispatchQueue.global(qos: .utility)
             .asyncAfter(deadline: .now() + timeout, execute: timeoutWorkItem)
 
@@ -166,6 +173,9 @@ private final class CodexProcessSession {
     }
 
     private func finish(_ result: Result<[Int: Data], Error>) {
+        // Everything the completion path touches comes out under the one lock, and is acted on
+        // outside it. The timeout item and the self-retain used to be read and cleared out here
+        // in the open, racing start().
         lock.lock()
         guard !finished else {
             lock.unlock()
@@ -173,16 +183,23 @@ private final class CodexProcessSession {
         }
         finished = true
         let completion = self.completion
+        let timeoutWorkItem = self.timeoutWorkItem
+        // Moved into a local before the ivar is cleared. `keepAlive` is our only strong reference:
+        // dropping it here, while we still have the lock held and teardown still to do, can
+        // deallocate `self` out from under the rest of this function. It stays alive on the stack
+        // until the frame ends.
+        let retained = self.keepAlive
         self.completion = nil
+        self.timeoutWorkItem = nil
+        self.keepAlive = nil
         lock.unlock()
 
         timeoutWorkItem?.cancel()
-        timeoutWorkItem = nil
         stdout.fileHandleForReading.readabilityHandler = nil
         stderr.fileHandleForReading.readabilityHandler = nil
         try? stdin.fileHandleForWriting.close()
         if process.isRunning { process.terminate() }
         completion?(result)
-        keepAlive = nil
+        withExtendedLifetime(retained) {}
     }
 }
