@@ -460,4 +460,38 @@ final class MeterViewModelTests: XCTestCase {
                                   resetsAt: now.addingTimeInterval(3600), isActive: true)],
               fetchedAt: now)
     }
+
+    /// A limit can report over 100% (overage). "Left" mode computes 100 - used, so an
+    /// unclamped 104% rendered as "-4%" in the popover — and VoiceOver read "minus 4 percent".
+    func testOverageIsClampedSoLeftModeNeverGoesNegative() async {
+        let vm = MeterViewModel(provider: .claude,
+                                client: StubClient(.success(Usage(
+                                    limits: [UsageLimit(kind: .session, percent: 104,
+                                                        resetsAt: now.addingTimeInterval(3600),
+                                                        isActive: true)],
+                                    fetchedAt: now))),
+                                now: { self.now })
+        await vm.refresh()
+        vm.displayMode = .remaining
+
+        let row = vm.rows[0]
+        XCTAssertEqual(row.displayPercent, 0, "0% left, never -4%")
+        XCTAssertEqual(row.usedPercent, 100, "used is capped at full")
+        XCTAssertGreaterThanOrEqual(row.barFraction, 0)
+    }
+
+    func testNegativePercentFromABadPayloadIsClampedToZero() async {
+        let vm = MeterViewModel(provider: .claude,
+                                client: StubClient(.success(Usage(
+                                    limits: [UsageLimit(kind: .session, percent: -5,
+                                                        resetsAt: now.addingTimeInterval(3600),
+                                                        isActive: true)],
+                                    fetchedAt: now))),
+                                now: { self.now })
+        await vm.refresh()
+
+        XCTAssertEqual(vm.rows[0].usedPercent, 0)
+        XCTAssertEqual(vm.rows[0].displayPercent, 0)
+    }
+
 }
