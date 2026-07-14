@@ -30,10 +30,16 @@ final class AutoUpdateIntegrationTests: XCTestCase {
 @MainActor
 private final class AutomaticUpdateControllerStub: AutomaticUpdateControlling {
     private(set) var startedValues: [Bool] = []
+    private(set) var checkNowCount = 0
+    var status: UpdateStatus = .idle
 
     func start(enabled: Bool) {
         startedValues.append(enabled)
     }
 
     func apply(enabled: Bool) {}
+
+    func checkNow() async {
+        checkNowCount += 1
+    }
 }

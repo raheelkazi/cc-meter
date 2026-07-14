@@ -104,4 +104,45 @@ final class MetricsTests: XCTestCase {
         XCTAssertEqual(countdownText(to: now.addingTimeInterval(-5), now: now), "resetting")
     }
 
+
+    // Shared by the popover's "updated ..." cue and Settings' "checked ..." cue. The phrasing
+    // lived inside lastUpdatedText with the word "updated" baked in, so it could not be reused.
+    func testRelativeTimeTextPhrasing() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let cases: [(TimeInterval, String)] = [
+            (-3, "just now"),
+            (-42, "42s ago"),
+            (-60 * 9, "9m ago"),
+            (-3600 * 3, "3h ago")
+        ]
+        for (offset, expected) in cases {
+            XCTAssertEqual(relativeTimeText(since: now.addingTimeInterval(offset), now: now),
+                           expected)
+        }
+    }
+
+    func testUpdateStatusSummariesAreHumanReadable() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let checked = now.addingTimeInterval(-3600 * 2)
+
+        XCTAssertEqual(UpdateStatus.idle.summary(now: now), "Not checked yet")
+        XCTAssertEqual(UpdateStatus.checking.summary(now: now), "Checking…")
+        XCTAssertEqual(UpdateStatus.upToDate(at: checked).summary(now: now),
+                       "Up to date · checked 2h ago")
+        XCTAssertEqual(UpdateStatus.unsupported.summary(now: now),
+                       "Only available for Homebrew service installations")
+    }
+
+    func testFailedUpdateSummaryNamesTheStageAndPointsAtTheLog() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let status = UpdateStatus.failed(UpdateFailure(stage: .upgrade, detail: "boom"),
+                                         at: now.addingTimeInterval(-60))
+
+        let summary = status.summary(now: now)
+
+        XCTAssertTrue(summary.contains("upgrade"), summary)
+        XCTAssertTrue(summary.contains("1m ago"), summary)
+        XCTAssertTrue(summary.contains("update.log"), summary)
+    }
+
 }

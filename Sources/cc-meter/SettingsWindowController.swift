@@ -9,11 +9,14 @@ final class SettingsWindowController {
     private var window: NSWindow?
     private let loadPreferences: () -> Preferences
     private let onChange: (Preferences) -> Void
+    private let updates: AutoUpdateController
 
     init(loadPreferences: @escaping () -> Preferences,
-         onChange: @escaping (Preferences) -> Void) {
+         onChange: @escaping (Preferences) -> Void,
+         updates: AutoUpdateController) {
         self.loadPreferences = loadPreferences
         self.onChange = onChange
+        self.updates = updates
     }
 
     func show() {
@@ -24,7 +27,7 @@ final class SettingsWindowController {
         }
 
         let contentSize = NSSize(width: 420, height: 560)
-        let view = SettingsView(initial: loadPreferences(), onChange: onChange)
+        let view = SettingsView(initial: loadPreferences(), onChange: onChange, updates: updates)
 
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: contentSize),

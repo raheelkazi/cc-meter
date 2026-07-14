@@ -94,9 +94,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let dashboard = DashboardViewModel(claude: claudeMeter, codex: codexMeter)
         self.dashboard = dashboard
 
+        // Built before the settings window: Settings shows the updater's status and can
+        // trigger a check, so it needs the controller to observe.
+        let autoUpdateController = Self.makeAutoUpdateController(
+            environment: ProcessInfo.processInfo.environment
+        )
+        self.autoUpdateController = autoUpdateController
+
         settingsWindow = SettingsWindowController(
             loadPreferences: { [preferencesStore] in preferencesStore.load() },
-            onChange: { [weak self] prefs in self?.applyPreferences(prefs) }
+            onChange: { [weak self] prefs in self?.applyPreferences(prefs) },
+            updates: autoUpdateController
         )
 
         let controller = MenuBarController(dashboard: dashboard) { [weak self] in
@@ -105,10 +113,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.install()
         self.controller = controller
 
-        let autoUpdateController = Self.makeAutoUpdateController(
-            environment: ProcessInfo.processInfo.environment
-        )
-        self.autoUpdateController = autoUpdateController
         Self.startAutomaticUpdates(autoUpdateController, preferences: preferences)
 
         dashboard.start()
