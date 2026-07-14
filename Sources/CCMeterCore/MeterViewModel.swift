@@ -44,8 +44,17 @@ public struct MeterRow: Identifiable {
 @MainActor
 public final class MeterViewModel: ObservableObject {
     public let provider: UsageProvider
-    @Published public private(set) var state: MeterState = .loading
-    @Published public var displayMode: DisplayMode = .used
+    @Published public private(set) var state: MeterState = .loading { didSet { rebuildRows() } }
+    @Published public var displayMode: DisplayMode = .used { didSet { rebuildRows() } }
+
+    /// Derived state, not a query.
+    ///
+    /// `rows` used to be a computed property that, per limit, filtered and sorted the entire
+    /// retained history and ran a least-squares fit — and the popover reads it several times
+    /// per render (plus `DashboardViewModel.alert` reads both providers' rows again), so a
+    /// single body pass rebuilt it ~8 times. It now recomputes only when `state` or
+    /// `displayMode` actually changes.
+    @Published public private(set) var rows: [MeterRow] = []
     /// Time of the last successful fetch, backing the "updated ..." staleness cue.
     @Published public private(set) var lastUpdated: Date?
     /// Transient failure state shown while the UI keeps rendering last-known data.
@@ -136,12 +145,16 @@ public final class MeterViewModel: ObservableObject {
         let result = await client.fetch()
         switch result {
         case .success(let usage):
+            // History first: `state` now drives the row rebuild, and the burn projection reads
+            // history. Recording after would rebuild the rows without the sample that just
+            // arrived, so every forecast would lag a poll behind.
+            if preferences.historyEnabled { history?.record(usage, provider: provider) }
+
             state = .ok(usage)
             lastUpdated = now()
             backoffUntil = nil
             staleSnapshot = nil
             store?.save(SavedUsage(usage: usage, savedAt: now()))
-            if preferences.historyEnabled { history?.record(usage, provider: provider) }
             dispatchNotifications(for: usage)
         case .failure(let error):
             if case .rateLimited(let retryAfter) = error {
@@ -260,8 +273,11 @@ public final class MeterViewModel: ObservableObject {
         return usage.spend
     }
 
-    public var rows: [MeterRow] {
-        guard case .ok(let usage) = state else { return [] }
+    private func rebuildRows() {
+        guard case .ok(let usage) = state else {
+            rows = []
+            return
+        }
         let mode = displayMode
         let clock = now()
 
@@ -272,7 +288,7 @@ public final class MeterViewModel: ObservableObject {
             counts[limit.kind.compactLabel, default: 0] += 1
         }
 
-        return usage.limits.enumerated().map { index, limit in
+        rows = usage.limits.enumerated().map { index, limit in
             let used = summarize(limit)
             let displayPercent = mode == .used ? used.percent : (100 - used.percent)
             let label = limit.kind.label
@@ -311,7 +327,9 @@ public final class MeterViewModel: ObservableObject {
         // Match by tolerance rather than exact equality because `resets_at`
         // jitters sub-second between fetches. (Legacy samples without a
         // recorded window are treated as matching.)
-        (history?.recent(provider: provider, kindLabel: identity, since: .distantPast) ?? [])
+        (history?.recent(provider: provider,
+                         kindLabel: identity,
+                         since: now().addingTimeInterval(-burnWindow)) ?? [])
             .filter { sample in
                 guard let windowResetsAt = sample.windowResetsAt else { return true }
                 return isSameWindow(windowResetsAt, limit.resetsAt)

@@ -479,4 +479,32 @@ final class MeterViewModelTests: XCTestCase {
         XCTAssertEqual(vm.rows[0].displayPercent, 0)
     }
 
+    /// `rows` is rebuilt when `state` changes, and the burn projection reads history — so the
+    /// poll's own sample has to be recorded BEFORE state is published, or every forecast lags
+    /// one poll behind.
+    func testForecastIncludesTheSampleFromThePollThatJustLanded() async {
+        // Four prior samples, climbing. The fifth arrives with this refresh and completes the
+        // trend; without it there is still a trend, so assert on the exact rate.
+        let samples = stride(from: 0, through: 45, by: 15).map {
+            HistorySample(kindLabel: "5-hour", percent: Double($0) / 3,
+                          at: now.addingTimeInterval(Double($0 - 60) * 60),
+                          windowResetsAt: now.addingTimeInterval(10 * 3600))
+        }
+        let history = InMemoryHistoryStore(samples: samples, now: { self.now })
+        let usage = Usage(limits: [
+            UsageLimit(kind: .session, percent: 20,
+                       resetsAt: now.addingTimeInterval(10 * 3600), isActive: true)
+        ], fetchedAt: now)
+        let vm = MeterViewModel(client: StubClient(.success(usage)),
+                                preferences: Preferences(historyEnabled: true),
+                                history: history, now: { self.now })
+
+        await vm.refresh()
+
+        XCTAssertNotNil(vm.rows.first?.forecast,
+                        "the newest sample must be in history before rows are rebuilt")
+        XCTAssertEqual(history.recent(kindLabel: "5-hour", since: .distantPast).count, 5,
+                       "this poll's sample was recorded")
+    }
+
 }
