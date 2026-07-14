@@ -73,9 +73,17 @@ public struct OAuthTokenRefresher: TokenRefreshing {
         }
 
         let newExpiry = decoded.expiresIn.map { now().addingTimeInterval($0) }
-        try store.write(accessToken: newAccess,
-                        refreshToken: decoded.refreshToken ?? refreshToken,
-                        expiresAt: newExpiry)
+        do {
+            try store.write(accessToken: newAccess,
+                            refreshToken: decoded.refreshToken ?? refreshToken,
+                            expiresAt: newExpiry,
+                            expectedCurrentRefreshToken: refreshToken)
+        } catch CredentialWriteError.concurrentRotation {
+            // The `claude` CLI rotated while we were in flight. Theirs is authoritative and
+            // live; ours is already dead. Adopt their token instead of overwriting it, which
+            // would invalidate a working grant and sign the user out of Claude Code.
+            return try? store.read().credentials.accessToken
+        }
         return newAccess
     }
 }
