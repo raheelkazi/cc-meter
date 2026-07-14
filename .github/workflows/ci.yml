@@ -1,0 +1,31 @@
+name: CI
+
+# `main` is built too, not just pull requests. Two PRs can each pass on their own base and
+# still not compile once both are in: #13 added a test asserting on a property that #14
+# deleted, neither diff touched the other's lines, git merged both cleanly, and `main` was
+# broken. Only a build of the merged result catches that.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: swift --version
+
+      # Release, because that is what the Homebrew formula builds and it is the config that
+      # has actually broken before. A debug-only build would not have caught it.
+      - name: Build (release)
+        run: swift build -c release
+
+      - name: Test
+        run: swift test
