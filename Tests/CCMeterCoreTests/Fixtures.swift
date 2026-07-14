@@ -1,4 +1,5 @@
 import Foundation
+@testable import CCMeterCore
 
 enum Fixtures {
     /// Trimmed real response captured 2026-07-03. Contains only usage numbers.
@@ -61,4 +62,50 @@ enum Fixtures {
       }
     }
     """.data(using: .utf8)!
+}
+
+/// Records every command it was handed and replays canned results. One spy for every call site,
+/// so the fakes cannot drift apart the way the four real runners did.
+final class SpyCommandRunner: CommandRunning, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _commands: [Command] = []
+    private var _results: [CommandResult]
+    var launchError: Error?
+
+    /// Commands passed to `run`, in order.
+    var commands: [Command] {
+        lock.lock(); defer { lock.unlock() }
+        return _commands
+    }
+
+    init(results: [CommandResult] = []) {
+        self._results = results
+    }
+
+    /// Convenience for the common "it worked and printed this" case.
+    static func succeeding(_ outputs: [Data] = [Data()]) -> SpyCommandRunner {
+        SpyCommandRunner(results: outputs.map {
+            CommandResult(status: 0, standardOutput: $0, standardError: Data(), timedOut: false)
+        })
+    }
+
+    func run(_ command: Command) throws -> CommandResult {
+        lock.lock()
+        _commands.append(command)
+        let error = launchError
+        let next = _results.isEmpty ? nil : _results.removeFirst()
+        lock.unlock()
+
+        if let error { throw error }
+        return next ?? CommandResult(status: 0, standardOutput: Data(),
+                                     standardError: Data(), timedOut: false)
+    }
+
+    func launch(_ command: Command) throws {
+        lock.lock()
+        _commands.append(command)
+        let error = launchError
+        lock.unlock()
+        if let error { throw error }
+    }
 }

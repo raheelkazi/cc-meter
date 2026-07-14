@@ -49,19 +49,16 @@ enum LoginItem {
     private static func guiDomain() -> String { "gui/\(getuid())" }
     private static func domainTarget() -> String { "gui/\(getuid())/\(LaunchAgent.label)" }
 
+    private static let runner: CommandRunning = SystemCommandRunner()
+
+    /// This used to hand launchctl a Pipe for stdout and stderr and then wait on it without ever
+    /// reading either one. A child that fills the ~64KB pipe buffer blocks forever on write while
+    /// the parent blocks forever in waitUntilExit — and there was no timeout to break the tie.
+    /// The shared runner drains both pipes concurrently and kills anything that overstays.
     @discardableResult
     private static func runLaunchctl(_ arguments: [String]) -> Int32 {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
-        process.arguments = arguments
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        do {
-            try process.run()
-            process.waitUntilExit()
-            return process.terminationStatus
-        } catch {
-            return -1
-        }
+        let command = Command(executable: "/bin/launchctl", arguments: arguments, timeout: 10)
+        guard let result = try? runner.run(command) else { return -1 }
+        return result.status
     }
 }

@@ -1,25 +1,6 @@
 import XCTest
 @testable import CCMeterCore
 
-/// Records what was handed to `security`, so we can assert the secret never reaches argv.
-private final class SpyKeychainCommand: KeychainCommandRunning {
-    private(set) var arguments: [[String]] = []
-    private(set) var inputs: [Data?] = []
-    var results: [(status: Int32, output: Data)]
-    var launchError: Error?
-
-    init(results: [(status: Int32, output: Data)]) {
-        self.results = results
-    }
-
-    func run(executable: String, arguments: [String], input: Data?) throws -> (status: Int32, output: Data) {
-        self.arguments.append(arguments)
-        self.inputs.append(input)
-        if let launchError { throw launchError }
-        return results.isEmpty ? (0, Data()) : results.removeFirst()
-    }
-}
-
 private func blob(access: String, refresh: String) -> Data {
     Data(#"{"claudeAiOauth":{"accessToken":"\#(access)","refreshToken":"\#(refresh)"}}"#.utf8)
 }
@@ -31,19 +12,19 @@ final class KeychainWriteTests: XCTestCase {
     /// AND refresh token — on the command line, where any process on the machine can read it
     /// out of `ps aux` for the duration of the call.
     func testCredentialBlobIsPassedOnStdinAndNeverInArguments() throws {
-        let spy = SpyKeychainCommand(results: [(0, Data())])
+        let spy = SpyCommandRunner.succeeding()
         let writer = KeychainWriter(service: "svc", account: "acct", runner: spy)
         let secret = blob(access: "SECRET-ACCESS", refresh: "SECRET-REFRESH")
 
         try writer.writeBlob(secret)
 
-        let args = try XCTUnwrap(spy.arguments.first)
+        let args = try XCTUnwrap(spy.commands.first?.arguments)
         for arg in args {
             XCTAssertFalse(arg.contains("SECRET-ACCESS"), "access token leaked into argv: \(arg)")
             XCTAssertFalse(arg.contains("SECRET-REFRESH"), "refresh token leaked into argv: \(arg)")
         }
 
-        let stdin = try XCTUnwrap(spy.inputs.first ?? nil)
+        let stdin = try XCTUnwrap(spy.commands.first?.input)
         let text = try XCTUnwrap(String(data: stdin, encoding: .utf8))
         XCTAssertTrue(text.contains("SECRET-ACCESS"), "the secret must actually reach security, on stdin")
     }
@@ -51,12 +32,12 @@ final class KeychainWriteTests: XCTestCase {
     /// `security -w` prompts *and asks to retype*, so a single copy on stdin fails with
     /// "passwords don't match" and silently stores nothing.
     func testSecretIsWrittenTwiceBecauseSecurityAsksToRetypeIt() throws {
-        let spy = SpyKeychainCommand(results: [(0, Data())])
+        let spy = SpyCommandRunner.succeeding()
         let writer = KeychainWriter(service: "svc", account: "acct", runner: spy)
 
         try writer.writeBlob(blob(access: "A", refresh: "R"))
 
-        let stdin = try XCTUnwrap(spy.inputs.first ?? nil)
+        let stdin = try XCTUnwrap(spy.commands.first?.input)
         let lines = String(data: stdin, encoding: .utf8)!
             .split(separator: "\n", omittingEmptySubsequences: true)
         XCTAssertEqual(lines.count, 2, "security retypes the password; it needs the secret twice")
@@ -64,7 +45,7 @@ final class KeychainWriteTests: XCTestCase {
     }
 
     func testNonZeroExitIsReportedRatherThanSilentlyIgnored() {
-        let spy = SpyKeychainCommand(results: [(1, Data())])
+        let spy = SpyCommandRunner(results: [CommandResult(status: 1, standardOutput: Data(), standardError: Data("item not found".utf8), timedOut: false)])
         let writer = KeychainWriter(service: "svc", account: "acct", runner: spy)
 
         XCTAssertThrowsError(try writer.writeBlob(blob(access: "A", refresh: "R")))
@@ -79,7 +60,7 @@ final class KeychainWriteTests: XCTestCase {
     func testWriteIsAbandonedWhenAnotherProcessRotatedTheRefreshTokenUnderUs() throws {
         // Read returns a blob whose refresh token is NOT the one we based our refresh on:
         // the CLI got there first.
-        let spy = SpyKeychainCommand(results: [(0, blob(access: "their-access", refresh: "their-new-refresh"))])
+        let spy = SpyCommandRunner.succeeding([blob(access: "their-access", refresh: "their-new-refresh")])
         let store = KeychainCredentialStore(
             reader: KeychainReader(service: "svc", account: "acct", runner: spy),
             writer: KeychainWriter(service: "svc", account: "acct", runner: spy)
@@ -94,13 +75,13 @@ final class KeychainWriteTests: XCTestCase {
             XCTAssertEqual(error as? CredentialWriteError, .concurrentRotation)
         }
 
-        XCTAssertEqual(spy.arguments.count, 1, "only the read should have run; the write must be abandoned")
+        XCTAssertEqual(spy.commands.count, 1, "only the read should have run; the write must be abandoned")
     }
 
     func testWriteProceedsWhenTheRefreshTokenIsStillTheOneWeRead() throws {
-        let spy = SpyKeychainCommand(results: [
-            (0, blob(access: "old-access", refresh: "unchanged-refresh")),   // read
-            (0, Data())                                                       // write
+        let spy = SpyCommandRunner.succeeding([
+            blob(access: "old-access", refresh: "unchanged-refresh"),   // read
+            Data()                                                      // write
         ])
         let store = KeychainCredentialStore(
             reader: KeychainReader(service: "svc", account: "acct", runner: spy),
@@ -112,6 +93,6 @@ final class KeychainWriteTests: XCTestCase {
                         expiresAt: nil,
                         expectedCurrentRefreshToken: "unchanged-refresh")
 
-        XCTAssertEqual(spy.arguments.count, 2, "read then write")
+        XCTAssertEqual(spy.commands.count, 2, "read then write")
     }
 }
