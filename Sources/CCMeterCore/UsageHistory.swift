@@ -70,24 +70,61 @@ enum HistoryMath {
     }
 }
 
-/// Persists samples as a JSON array in Application Support, bounded to a
-/// retention window (default 7 days) so the file stays small.
+/// Persists samples in Application Support, bounded to a retention window (default 7 days).
+///
+/// Stored as JSON Lines — one sample per line — so a poll appends a few hundred bytes instead
+/// of re-serialising the whole file. It previously encoded *every retained sample* and
+/// rewrote the entire file on every poll, on the main actor: at a 60s poll that is a ~4MB
+/// re-encode 1,440 times a day (~6GB of writes), and it grew for the first 7 days and then
+/// plateaued — so it degraded the longer the app stayed running.
+///
+/// All disk work now happens on a background queue. The file is compacted (fully rewritten
+/// from the pruned in-memory samples) only every `compactEvery` records, which is what keeps
+/// it from growing without bound.
 public final class FileHistoryStore: HistoryStoring {
     private let url: URL
     private let retention: TimeInterval
     private let now: () -> Date
     private var samples: [HistorySample]
+    private let compactEvery: Int
+    private var recordsSinceCompact = 0
 
-    public init(url: URL, retention: TimeInterval = 7 * 24 * 3600, now: @escaping () -> Date = { Date() }) {
+    /// `record` is called from `@MainActor refresh()`. Encoding and writing there stalled the
+    /// UI once per poll, so every write is handed to this serial queue instead.
+    private static let io = DispatchQueue(label: "cc-meter.history.io", qos: .utility)
+
+    public init(url: URL,
+                retention: TimeInterval = 7 * 24 * 3600,
+                compactEvery: Int = 500,
+                now: @escaping () -> Date = { Date() }) {
         self.url = url
         self.retention = retention
+        self.compactEvery = compactEvery
         self.now = now
-        if let data = try? Data(contentsOf: url),
-           let decoded = try? JSONDecoder().decode([HistorySample].self, from: data) {
-            self.samples = decoded
-        } else {
-            self.samples = []
+
+        let (loaded, isLegacyFormat) = Self.load(url)
+        self.samples = HistoryMath.pruned(loaded, now: now(), retention: retention)
+        // A file left in the old whole-array format is rewritten once, as JSON Lines.
+        if isLegacyFormat { compact() }
+    }
+
+    /// Returns the samples, and whether the file was in the legacy JSON-array format.
+    private static func load(_ url: URL) -> ([HistorySample], isLegacyFormat: Bool) {
+        guard let data = try? Data(contentsOf: url), !data.isEmpty else { return ([], false) }
+        let decoder = JSONDecoder()
+
+        if let legacy = try? decoder.decode([HistorySample].self, from: data) {
+            return (legacy, true)
         }
+
+        let decoded = data.split(separator: UInt8(ascii: "\n"))
+            .compactMap { try? decoder.decode(HistorySample.self, from: Data($0)) }
+        return (decoded, false)
+    }
+
+    /// Blocks until every queued write has landed. For tests, and for a clean shutdown.
+    public func flush() {
+        Self.io.sync {}
     }
 
     /// Default location: ~/Library/Application Support/cc-meter/history.json.
@@ -107,13 +144,23 @@ public final class FileHistoryStore: HistoryStoring {
 
     public func record(_ usage: Usage, provider: UsageProvider) {
         let clock = now()
-        for limit in usage.limits {
-            samples.append(HistorySample(provider: provider,
-                                         kindLabel: limit.kind.identity, percent: limit.percent,
-                                         at: clock, windowResetsAt: limit.resetsAt))
+        let fresh = usage.limits.map {
+            HistorySample(provider: provider,
+                          kindLabel: $0.kind.identity, percent: $0.percent,
+                          at: clock, windowResetsAt: $0.resetsAt)
         }
+        samples.append(contentsOf: fresh)
         samples = HistoryMath.pruned(samples, now: clock, retention: retention)
-        persist()
+
+        recordsSinceCompact += 1
+        // Pruning drops samples on every poll once the retention window is full, so compaction
+        // cannot be driven by "did anything expire" — it would then run every single time.
+        // Append cheaply; rewrite occasionally.
+        if recordsSinceCompact >= compactEvery {
+            compact()
+        } else {
+            append(fresh)
+        }
     }
 
     public func recent(kindLabel: String, since: Date) -> [HistorySample] {
@@ -124,9 +171,48 @@ public final class FileHistoryStore: HistoryStoring {
         HistoryMath.recent(samples, provider: provider, kindLabel: kindLabel, since: since)
     }
 
-    private func persist() {
-        guard let data = try? JSONEncoder().encode(samples) else { return }
-        try? data.write(to: url, options: .atomic)
+    /// Appends only the new samples — a few hundred bytes — rather than rewriting the file.
+    private func append(_ fresh: [HistorySample]) {
+        let encoder = JSONEncoder()
+        var payload = Data()
+        for sample in fresh {
+            guard let line = try? encoder.encode(sample) else { continue }
+            payload.append(line)
+            payload.append(UInt8(ascii: "\n"))
+        }
+        guard !payload.isEmpty else { return }
+
+        let url = self.url
+        Self.io.async {
+            let manager = FileManager.default
+            guard manager.fileExists(atPath: url.path) else {
+                try? payload.write(to: url, options: .atomic)
+                return
+            }
+            guard let handle = try? FileHandle(forWritingTo: url) else { return }
+            defer { try? handle.close() }
+            try? handle.seekToEnd()
+            try? handle.write(contentsOf: payload)
+        }
+    }
+
+    /// Rewrites the file from the pruned in-memory samples, dropping everything expired. This
+    /// is the only thing that shrinks the file, so it must run periodically.
+    private func compact() {
+        recordsSinceCompact = 0
+
+        let encoder = JSONEncoder()
+        var payload = Data()
+        for sample in samples {
+            guard let line = try? encoder.encode(sample) else { continue }
+            payload.append(line)
+            payload.append(UInt8(ascii: "\n"))
+        }
+
+        let url = self.url
+        Self.io.async {
+            try? payload.write(to: url, options: .atomic)
+        }
     }
 }
 
