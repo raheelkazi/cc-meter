@@ -1,11 +1,11 @@
 import Foundation
 
 public protocol CodexExecutableResolving {
-    func resolve() -> URL?
+    func resolve() -> CodexExecutable?
 }
 
 public protocol CodexAppServerTransport {
-    func exchange(executable: URL,
+    func exchange(executable: CodexExecutable,
                   input: Data,
                   responseIDs: Set<Int>,
                   timeout: TimeInterval) async throws -> [Int: Data]
@@ -17,49 +17,58 @@ public enum CodexTransportError: Error, Equatable {
     case prematureEOF(String)
 }
 
+/// Finds the codex CLI.
+///
+/// Well-known install locations are checked first, so the common case costs nothing. Anything
+/// else — nvm, fnm, volta, asdf, a custom npm prefix — is invisible to a launchd agent, so we
+/// fall back to the PATH the user's own login shell reports.
 public struct CodexExecutableResolver: CodexExecutableResolving {
     private let candidates: [URL]
     private let fileManager: FileManager
+    private let loginShellPath: LoginShellPathProviding
 
-    public init(candidates: [URL]? = nil, fileManager: FileManager = .default) {
+    public init(candidates: [URL]? = nil,
+                fileManager: FileManager = .default,
+                loginShellPath: LoginShellPathProviding = LoginShellPath()) {
         self.fileManager = fileManager
         self.candidates = candidates ?? Self.defaultCandidates()
+        self.loginShellPath = loginShellPath
     }
 
-    public func resolve() -> URL? {
-        candidates.first { fileManager.isExecutableFile(atPath: $0.path) }
+    public func resolve() -> CodexExecutable? {
+        if let url = candidates.first(where: { fileManager.isExecutableFile(atPath: $0.path) }) {
+            return CodexExecutable(url: url, searchPath: searchPath(alongside: url))
+        }
+        guard let path = loginShellPath.loginShellPath(),
+              let url = firstExecutable(named: "codex", on: path) else { return nil }
+        return CodexExecutable(url: url, searchPath: path)
+    }
+
+    /// An npm-installed codex is a `#!/usr/bin/env node` script, and its `node` sits in the same
+    /// directory, so that directory has to be on the child's PATH for the script to launch.
+    private func searchPath(alongside url: URL) -> String {
+        let directory = url.deletingLastPathComponent().path
+        let inherited = ProcessInfo.processInfo.environment["PATH"] ?? ""
+        return inherited.isEmpty ? directory : "\(directory):\(inherited)"
+    }
+
+    private func firstExecutable(named name: String, on path: String) -> URL? {
+        for directory in path.split(separator: ":") {
+            let url = URL(fileURLWithPath: String(directory)).appendingPathComponent(name)
+            if fileManager.isExecutableFile(atPath: url.path) { return url }
+        }
+        return nil
     }
 
     private static func defaultCandidates() -> [URL] {
         let home = FileManager.default.homeDirectoryForCurrentUser
-        var urls = [
+        return [
             URL(fileURLWithPath: "/Applications/Codex.app/Contents/Resources/codex"),
-            home.appendingPathComponent("Applications/Codex.app/Contents/Resources/codex")
-        ]
-        if let pathURL = whichCodex() { urls.append(pathURL) }
-        urls.append(contentsOf: [
+            home.appendingPathComponent("Applications/Codex.app/Contents/Resources/codex"),
             URL(fileURLWithPath: "/opt/homebrew/bin/codex"),
             URL(fileURLWithPath: "/usr/local/bin/codex"),
             home.appendingPathComponent(".local/bin/codex")
-        ])
-        return urls
-    }
-
-    private static func whichCodex() -> URL? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-        process.arguments = ["codex"]
-        let output = Pipe()
-        process.standardOutput = output
-        process.standardError = Pipe()
-        do { try process.run() } catch { return nil }
-        let data = output.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0,
-              let path = String(data: data, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-              !path.isEmpty else { return nil }
-        return URL(fileURLWithPath: path)
+        ]
     }
 }
 
