@@ -94,12 +94,6 @@ public final class MeterViewModel: ObservableObject {
     /// Window of history used to estimate burn rate; long enough to smooth a poll
     /// or two of noise, short enough to react to a fresh spike.
     private let burnWindow: TimeInterval = 2 * 3600
-    /// Two samples belong to the same limit window when their reset times are
-    /// within this tolerance. The endpoint's `resets_at` jitters by up to ~1s
-    /// between fetches, so exact equality wrongly split every poll into its own
-    /// "window" (killing burn forecasts). A real reset moves `resets_at` by the
-    /// whole window (>=5h), so a generous minutes-scale tolerance is unambiguous.
-    private let windowMatchTolerance: TimeInterval = 600
 
     public init(provider: UsageProvider = .claude,
                 client: UsageFetching,
@@ -388,7 +382,7 @@ public final class MeterViewModel: ObservableObject {
         (history?.recent(provider: provider, kindLabel: identity, since: .distantPast) ?? [])
             .filter { sample in
                 guard let windowResetsAt = sample.windowResetsAt else { return true }
-                return abs(windowResetsAt.timeIntervalSince(limit.resetsAt)) < windowMatchTolerance
+                return isSameWindow(windowResetsAt, limit.resetsAt)
             }
     }
 

@@ -42,12 +42,23 @@ public final class ThresholdNotifier {
 
         for limit in usage.limits {
             let key = "\(provider.rawValue)#\(limit.kind.identity)"
-            let isNewWindow = windowResetsAt[key] != limit.resetsAt
+            // Tolerance, not equality: `resets_at` jitters sub-second between polls, and
+            // comparing exactly made every poll a "new window" — which re-baselined
+            // `lastPercent` to the current value and left `previous < threshold` unsatisfiable.
+            // No notification could ever fire. See `isSameWindow`.
+            let isNewWindow = windowResetsAt[key].map { !isSameWindow($0, limit.resetsAt) } ?? true
             if isNewWindow {
                 windowResetsAt[key] = limit.resetsAt
                 firedThresholds[key] = []
                 lastPercent[key] = limit.percent   // baseline, no retroactive fire
+                // Drop the previous window's heads-up marker; without this the set grows
+                // forever, one entry per window, for the life of the process.
+                firedHeadsUp = firedHeadsUp.filter { !$0.hasPrefix("\(key)@") }
             }
+
+            // The window's canonical reset date — the one we first saw. Keys must be built
+            // from this, never from `limit.resetsAt`, which jitters on every poll.
+            let windowAnchor = windowResetsAt[key] ?? limit.resetsAt
 
             let previous = lastPercent[key] ?? limit.percent
             for threshold in thresholds {
@@ -62,7 +73,10 @@ public final class ThresholdNotifier {
 
             if let mins = preferences.sessionResetHeadsUpMinutes, limit.kind.isSessionWindow {
                 let secondsLeft = limit.resetsAt.timeIntervalSince(now)
-                let headsUpKey = "\(key)@\(limit.resetsAt.timeIntervalSince1970)"
+                // Anchored to the window, not to the jittering value: keying on
+                // `limit.resetsAt` produced a fresh key every poll, so once the tolerance
+                // above was fixed this would have fired on *every* poll instead of once.
+                let headsUpKey = "\(key)@\(windowAnchor.timeIntervalSince1970)"
                 let withinWindow = secondsLeft > 0 && secondsLeft <= Double(mins * 60)
                 if isNewWindow && withinWindow {
                     // First time we see this window and we're already inside the

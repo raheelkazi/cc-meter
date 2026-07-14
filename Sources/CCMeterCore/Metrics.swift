@@ -12,6 +12,24 @@ public func usageColor(percent: Double,
     return .green
 }
 
+/// Do two `resets_at` values describe the same quota window?
+///
+/// The endpoint's `resets_at` jitters by up to ~1s between fetches, so comparing exactly
+/// makes every poll look like a brand-new window. That bug killed burn forecasts once
+/// (fixed with a tolerance in MeterViewModel) and, separately, killed every notification:
+/// re-baselining on each poll made "crossed a threshold" unsatisfiable. Both sites now
+/// share this one definition so they cannot drift apart again.
+///
+/// A real reset moves `resets_at` by the whole window (>= 5h), so a minutes-scale tolerance
+/// is unambiguous.
+public let windowMatchTolerance: TimeInterval = 600
+
+public func isSameWindow(_ lhs: Date,
+                         _ rhs: Date,
+                         tolerance: TimeInterval = windowMatchTolerance) -> Bool {
+    abs(lhs.timeIntervalSince(rhs)) < tolerance
+}
+
 /// Bare time to reset, e.g. "2d 3h", "42m". The popover shows this as a right-aligned
 /// column, where the "resets in" prefix would be identical on every row and so carries
 /// no information.
