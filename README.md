@@ -1,9 +1,25 @@
 # cc-meter
 
 A native macOS menu bar app that shows your Claude Code and OpenAI Codex usage
-limits in real time. Each provider gets its own section with the quota windows
-and per-model limits it reports. Limits are color-coded like a fuel gauge (green
-when plenty is left, amber past 50%, red past 90%), with a reset countdown.
+limits in real time.
+
+<p align="center">
+  <img src="docs/popover.png" width="376"
+       alt="The cc-meter popover: Claude Code and Codex usage limits, one line per provider, each showing the quota window, percent used, and time to reset.">
+</p>
+
+Click the menu bar item and every limit you have is there, one line per provider.
+Each cell is a quota window (`5h`, `7d`, or a per-model one like `7d·Sol`), how
+much of it you have used, and how long until it resets.
+
+The percentage *is* the meter: green under 50%, amber from 50%, red from 90%. So
+you read the panel at a glance rather than parsing it — nothing shouts while
+you are fine.
+
+When a limit does go critical, an alert line appears above the list naming the
+one that will run out first, and it disappears again once the limit clears. It
+is the only thing that ever changes the panel's shape, which is what makes it
+worth noticing.
 
 cc-meter automatically detects signed-in providers. For Claude Code it reads the
 OAuth token stored by the `claude` CLI in your macOS Keychain. For Codex it uses
@@ -56,9 +72,9 @@ written to `~/Library/Logs/cc-meter/update.log`. To recover manually, run:
     swift run cc-meter
 
 The app runs as a menu bar accessory (no dock icon). Click the menu bar item for
-the full breakdown. Claude Code and Codex appear in stacked sections when both
-are available. The menu-bar percentage comes from the most constrained visible
-provider. Use the Used/Left button to switch both sections between used and
+the full breakdown. Each provider's limits appear on their own line when both are
+available. The menu-bar percentage comes from the most constrained visible
+provider. Use the Used/Left control to switch both providers between used and
 remaining views, Refresh to fetch both immediately, Settings… to open
 preferences, and Quit to exit.
 
@@ -75,8 +91,8 @@ Usage refreshes every minute by default (configurable in Settings).
   80% / 95% / 100% (configurable), plus an optional heads-up before the 5-hour
   window resets. Alerts are edge-triggered, so you get one per crossing and they
   re-arm after each window reset.
-- **Burn-rate projection**: each row shows current burn, safe burn, and whether
-  the limit is projected to exhaust before the reset.
+- **Burn-rate projection**: when a limit is on pace to run out before it resets,
+  the panel says so. It stays quiet otherwise.
 - **Spend / extra-credits row**: rendered when the usage endpoint reports it.
 - **Automatic token refresh**: on an expired token the app silently refreshes
   using the stored refresh token and retries, falling back to a re-authenticate
