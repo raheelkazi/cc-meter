@@ -101,4 +101,93 @@ final class NotificationsTests: XCTestCase {
         XCTAssertTrue(event?.title.contains("Codex") ?? false)
         XCTAssertTrue(event?.body.contains("Codex") ?? false)
     }
+
+    // MARK: - resets_at jitter
+    //
+    // The endpoint's resets_at jitters sub-second between polls. MeterViewModel already
+    // tolerates that; ThresholdNotifier compared Dates exactly, so every poll looked like a
+    // brand-new window, re-baselined lastPercent, and made `previous < threshold` unsatisfiable.
+    // Net effect: no notification could ever fire, for anyone.
+
+    private func jitteringUsage(_ percent: Double,
+                                resetsAt: Date,
+                                jitter: TimeInterval,
+                                kind: WindowKind = .session,
+                                fetchedAt: Date) -> Usage {
+        Usage(limits: [UsageLimit(kind: kind,
+                                  percent: percent,
+                                  resetsAt: resetsAt.addingTimeInterval(jitter),
+                                  isActive: true)],
+              fetchedAt: fetchedAt)
+    }
+
+    func testThresholdFiresWhenResetsAtJittersSubSecondWithinTheSameWindow() {
+        let notifier = ThresholdNotifier()
+        let prefs = Preferences(notificationThresholds: [80])
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let reset = now.addingTimeInterval(3600)
+
+        _ = notifier.evaluate(jitteringUsage(70, resetsAt: reset, jitter: 0, fetchedAt: now),
+                              preferences: prefs, now: now)
+        let events = notifier.evaluate(
+            jitteringUsage(85, resetsAt: reset, jitter: 0.0003, fetchedAt: now),
+            preferences: prefs, now: now
+        )
+
+        XCTAssertEqual(events.count, 1, "crossing 80% must notify; 0.3ms of jitter is not a new window")
+    }
+
+    /// The second-order trap: the heads-up dedupe key embedded the *jittering* resetsAt, so
+    /// simply tolerating jitter in isNewWindow would flip this from never-firing to firing on
+    /// every single poll.
+    func testHeadsUpFiresOnceAcrossManyJitteringPolls() {
+        let notifier = ThresholdNotifier()
+        let prefs = Preferences(notificationThresholds: [], sessionResetHeadsUpMinutes: 10)
+        let start = Date(timeIntervalSince1970: 1_000_000)
+        let reset = start.addingTimeInterval(3600)
+
+        // Poll well outside the heads-up range, so the window is established without suppressing.
+        _ = notifier.evaluate(jitteringUsage(10, resetsAt: reset, jitter: 0, fetchedAt: start),
+                              preferences: prefs, now: start)
+
+        // Now poll repeatedly *inside* the 10-minute range. Every poll carries fresh jitter —
+        // none of them matches the established date exactly, so this genuinely exercises the
+        // jitter path rather than passing on a lucky bit-identical Date.
+        var fired = 0
+        for i in 0..<5 {
+            let now = reset.addingTimeInterval(-300 + Double(i))
+            let events = notifier.evaluate(
+                jitteringUsage(10, resetsAt: reset, jitter: Double(i + 1) * 0.0004, fetchedAt: now),
+                preferences: prefs, now: now
+            )
+            fired += events.count
+        }
+
+        XCTAssertEqual(fired, 1, "the heads-up must fire exactly once, not once per poll")
+    }
+
+    /// The tolerance must not swallow a genuine reset: a real window moves by hours.
+    func testRealWindowResetStillReArmsThresholds() {
+        let notifier = ThresholdNotifier()
+        let prefs = Preferences(notificationThresholds: [80])
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let reset = now.addingTimeInterval(3600)
+
+        _ = notifier.evaluate(jitteringUsage(70, resetsAt: reset, jitter: 0, fetchedAt: now),
+                              preferences: prefs, now: now)
+        _ = notifier.evaluate(jitteringUsage(85, resetsAt: reset, jitter: 0, fetchedAt: now),
+                              preferences: prefs, now: now)
+
+        // A real reset: the window jumps forward by hours, usage drops, then climbs again.
+        let newReset = reset.addingTimeInterval(5 * 3600)
+        _ = notifier.evaluate(jitteringUsage(5, resetsAt: newReset, jitter: 0, fetchedAt: now),
+                              preferences: prefs, now: now)
+        let events = notifier.evaluate(
+            jitteringUsage(85, resetsAt: newReset, jitter: 0, fetchedAt: now),
+            preferences: prefs, now: now
+        )
+
+        XCTAssertEqual(events.count, 1, "a genuine reset must re-arm the threshold")
+    }
+
 }
