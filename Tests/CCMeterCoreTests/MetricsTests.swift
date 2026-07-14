@@ -81,4 +81,27 @@ final class MetricsTests: XCTestCase {
     func testCountdownAtExactlyZeroSeconds() {
         XCTAssertEqual(countdownText(to: now, now: now), "resetting")
     }
+
+    // The flat popover shows the reset as a right-aligned column ("5d 17h"), so the bare
+    // value is derived once here and the "resets in ..." sentence is built from it.
+    func testCountdownValueDropsThePrefixAndTextIsBuiltFromIt() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let cases: [(TimeInterval, String)] = [
+            (3600 * 24 * 5 + 3600 * 17, "5d 17h"),
+            (3600 * 2 + 60 * 5, "2h 5m"),
+            (60 * 38, "38m")
+        ]
+        for (offset, expected) in cases {
+            let resetsAt = now.addingTimeInterval(offset)
+            XCTAssertEqual(countdownValue(to: resetsAt, now: now), expected)
+            XCTAssertEqual(countdownText(to: resetsAt, now: now), "resets in \(expected)")
+        }
+    }
+
+    func testCountdownValueReadsNowOncePassed() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        XCTAssertEqual(countdownValue(to: now.addingTimeInterval(-5), now: now), "now")
+        XCTAssertEqual(countdownText(to: now.addingTimeInterval(-5), now: now), "resetting")
+    }
+
 }

@@ -1,6 +1,26 @@
 import Foundation
 import Combine
 
+/// A limit that has crossed into `.red`, surfaced above the flat list.
+public struct UsageAlert: Equatable {
+    public let provider: UsageProvider
+    public let label: String
+    /// Follows the Used/Left toggle, like every row.
+    public let percent: Int
+    public let countdown: String
+    /// Other limits also above green, counted rather than stacked into more banners.
+    public let otherElevatedCount: Int
+
+    public init(provider: UsageProvider, label: String, percent: Int,
+                countdown: String, otherElevatedCount: Int) {
+        self.provider = provider
+        self.label = label
+        self.percent = percent
+        self.countdown = countdown
+        self.otherElevatedCount = otherElevatedCount
+    }
+}
+
 public struct ProviderCompactSummary: Equatable {
     public let provider: UsageProvider
     public let percent: Int
@@ -57,6 +77,35 @@ public final class DashboardViewModel: ObservableObject {
         compactProviders
             .max { $0.percent < $1.percent }
             .map { (percent: $0.percent, color: $0.color) }
+    }
+
+    /// The one limit worth interrupting for, or nil when nothing is.
+    ///
+    /// The popover is a flat list with no hero, so a limit in trouble has to announce
+    /// itself. "Trouble" is the app's existing `.red` severity — reusing `usageColor`
+    /// rather than adding a second threshold that could drift away from the bars.
+    public var alert: UsageAlert? {
+        let meters = showsCodex ? [claude, codex] : [claude]
+        let entries = meters.flatMap { meter in
+            meter.rows.map { (provider: meter.provider, row: $0) }
+        }
+
+        // Rank on used%, never on the displayed number: 6% *left* is still critical.
+        guard let worst = entries
+            .filter({ $0.row.color == .red })
+            .max(by: { $0.row.usedPercent < $1.row.usedPercent })
+        else { return nil }
+
+        let others = entries.filter {
+            !($0.provider == worst.provider && $0.row.id == worst.row.id)
+                && $0.row.color != .green
+        }
+
+        return UsageAlert(provider: worst.provider,
+                          label: worst.row.label,
+                          percent: worst.row.displayPercent,
+                          countdown: worst.row.countdown,
+                          otherElevatedCount: others.count)
     }
 
     public var isLoading: Bool {

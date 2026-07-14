@@ -36,11 +36,21 @@ public struct StaleSnapshot: Equatable {
 public struct MeterRow: Identifiable {
     public let id: String
     public let label: String
+    /// Short form for the side-by-side cells ("7d·Sol"), or the full `label` when shortening
+    /// would collide with another limit and make the two indistinguishable.
+    public let compactLabel: String
     public let isPromoted: Bool
+    /// What the row shows, which flips with the Used/Left toggle.
     public let displayPercent: Int
+    /// How full the window actually is. Severity is ranked on this, never on
+    /// `displayPercent` — 6% *left* is still critical, and must stay critical.
+    public let usedPercent: Int
     public let barFraction: Double
     public let color: MeterColor
+    /// "resets in 5d 17h" — for prose contexts.
     public let countdown: String
+    /// "5d 17h" — for the popover's reset column.
+    public let countdownShort: String
     /// Time-to-exhaustion projection, e.g. "~40m to limit", or nil when the pace
     /// is flat/insufficient to project.
     public let burn: String?
@@ -325,6 +335,14 @@ public final class MeterViewModel: ObservableObject {
         let mode = displayMode
         let clock = now()
         let promotedIndex = mostConstrainedIndexedLimit(in: usage)?.index
+
+        // Shortening a label is the one thing here that can destroy information: two limits
+        // that compact to the same cell would be indistinguishable. When that happens, the
+        // colliding limits keep their full labels rather than lie about being different.
+        let compactCounts = usage.limits.reduce(into: [String: Int]()) { counts, limit in
+            counts[limit.kind.compactLabel, default: 0] += 1
+        }
+
         return usage.limits.enumerated().map { index, limit in
             let used = summarize(limit)
             let displayPercent = mode == .used ? used.percent : (100 - used.percent)
@@ -336,14 +354,20 @@ public final class MeterViewModel: ObservableObject {
                                             resetsAt: limit.resetsAt,
                                             now: clock)
 
+            let compact = limit.kind.compactLabel
+            let isUnique = (compactCounts[compact] ?? 0) == 1
+
             // Index-prefixed id stays unique even if two windows share a label.
             return MeterRow(id: "\(index)-\(limit.kind.identity)",
                             label: label,
+                            compactLabel: isUnique ? compact : label,
                             isPromoted: index == promotedIndex,
                             displayPercent: displayPercent,
+                            usedPercent: used.percent,
                             barFraction: Double(displayPercent) / 100.0,
                             color: used.color,
                             countdown: countdownText(to: limit.resetsAt, now: clock),
+                            countdownShort: countdownValue(to: limit.resetsAt, now: clock),
                             burn: projection.map(burnText),
                             burnUrgent: projection?.willExhaustBeforeReset ?? false,
                             forecast: projection.flatMap {

@@ -10,7 +10,7 @@ final class CodexUsageResponseTests: XCTestCase {
         let usage = try response.toUsage(now: now)
 
         XCTAssertEqual(usage.limits.map(\.kind.label), [
-            "5-hour", "7-day", "7-day (GPT-5.3-Codex-Spark)"
+            "5-hour", "7-day", "7-day · GPT-5.3-Codex-Spark"
         ])
         XCTAssertEqual(usage.limits.map(\.percent), [25, 40, 10])
         XCTAssertEqual(usage.limits[0].resetsAt, Date(timeIntervalSince1970: 1_783_900_000))
@@ -43,7 +43,7 @@ final class CodexUsageResponseTests: XCTestCase {
             unnamedCodexModelName: "GPT-5.6-Sol"
         ).limits.first)
 
-        XCTAssertEqual(limit.kind.label, "7-day (GPT-5.6-Sol)")
+        XCTAssertEqual(limit.kind.label, "7-day · GPT-5.6-Sol")
         XCTAssertEqual(limit.kind.identity, "codex:codex:primary")
     }
 
@@ -54,8 +54,8 @@ final class CodexUsageResponseTests: XCTestCase {
         XCTAssertEqual(
             try response.toUsage(now: now, unnamedCodexModelName: "GPT-5.6-Sol")
                 .limits.map(\.kind.label),
-            ["5-hour (GPT-5.6-Sol)", "7-day (GPT-5.6-Sol)",
-             "7-day (GPT-5.3-Codex-Spark)"]
+            ["5-hour · GPT-5.6-Sol", "7-day · GPT-5.6-Sol",
+             "7-day · GPT-5.3-Codex-Spark"]
         )
     }
 

@@ -23,12 +23,16 @@ final class MenuBarController {
             button.action = #selector(togglePopover)
         }
         popover.behavior = .transient
-        popover.contentSize = NSSize(width: 360, height: 560)
         let root = PopoverView(dashboard: dashboard, onOpenSettings: { [weak self] in
             self?.popover.performClose(nil)
             self?.onOpenSettings()
         })
-        popover.contentViewController = NSHostingController(rootView: root)
+        let controller = NSHostingController(rootView: root)
+        // The panel is now short at rest and grows only when a limit goes critical, so its
+        // height has to follow the content. A pinned contentSize left ~250pt of dead space
+        // under the list; .preferredContentSize keeps the popover fitted as the list changes.
+        controller.sizingOptions = [.preferredContentSize]
+        popover.contentViewController = controller
 
         // Re-render the status title on any published change.
         dashboard.objectWillChange

@@ -13,7 +13,7 @@ final class DecodingTests: XCTestCase {
         XCTAssertEqual(usage.limits[1].kind, .weeklyAll)
         XCTAssertEqual(usage.limits[1].kind.label, "7-day")
         XCTAssertEqual(usage.limits[2].kind, .weeklyScoped(model: "Fable"))
-        XCTAssertEqual(usage.limits[2].kind.label, "7-day (Fable)")
+        XCTAssertEqual(usage.limits[2].kind.label, "7-day · Fable")
 
         XCTAssertEqual(usage.limits[2].percent, 54)
         XCTAssertTrue(usage.limits[2].isActive)
