@@ -233,12 +233,13 @@ struct PopoverView: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
 
-            // No bar: colour on the number already carries severity, and the bar was 90%
-            // empty track at these values — it was also what pushed the model name off the row.
+            // The percentage IS the meter now that the bar is gone, so it carries the colour:
+            // green under 50, amber from 50, red from 90. Severity is always read from used%,
+            // so a low number in "Left" mode still shows red.
             Text("\(row.displayPercent)%")
                 .font(.system(size: 12.5, weight: .bold))
                 .monospacedDigit()
-                .foregroundStyle(percentColor(row.color))
+                .foregroundStyle(row.color.swiftUIColor)
 
             Text(row.countdownShort)
                 .font(.system(size: 11))
@@ -250,15 +251,6 @@ struct PopoverView: View {
         .help(row.label)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(row.label), \(row.displayPercent) percent, \(row.countdown)")
-    }
-
-    /// Colour rides the number as well as the bar, so severity survives colour-blindness
-    /// paired with the digits.
-    private func percentColor(_ color: MeterColor) -> Color {
-        switch color {
-        case .green: return .primary
-        case .amber, .red: return color.swiftUIColor
-        }
     }
 
     @ViewBuilder private func bar(fraction: Double, color: Color) -> some View {
