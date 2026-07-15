@@ -928,6 +928,11 @@ public final class FileUsageEventStore: UsageEventStoring {
     public func append(_ incoming: [UsageEvent]) {
         lock.lock()
         let clock = now()
+        // Prune expired events and rebuild the key set BEFORE deduping, so a dedupKey whose event
+        // has aged out of retention is freed and a re-logged event with that key is accepted rather
+        // than silently dropped (then the old copy pruned away, leaving nothing).
+        events = EventMath.pruned(events, now: clock, retention: retention)
+        keys = Set(events.map(\.dedupKey))
         var fresh: [UsageEvent] = []
         for event in incoming where !keys.contains(event.dedupKey) {
             keys.insert(event.dedupKey)
@@ -1002,6 +1007,10 @@ public final class InMemoryUsageEventStore: UsageEventStoring {
     public func append(_ incoming: [UsageEvent]) {
         lock.lock(); defer { lock.unlock() }
         let clock = now()
+        // Prune expired events and rebuild the key set BEFORE deduping, so a dedupKey whose event
+        // has aged out of retention is freed and a re-logged event with that key is accepted.
+        events = EventMath.pruned(events, now: clock, retention: retention)
+        keys = Set(events.map(\.dedupKey))
         for event in incoming where !keys.contains(event.dedupKey) {
             keys.insert(event.dedupKey)
             events.append(event)
