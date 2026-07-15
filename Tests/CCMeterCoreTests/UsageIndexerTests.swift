@@ -89,4 +89,19 @@ final class UsageIndexerTests: XCTestCase {
         makeIndexer(fs, store, InMemoryCursorStore()).tick()
         XCTAssertTrue(store.events(since: .distantPast).isEmpty)
     }
+
+    func testCursorsForAgedOutFilesArePruned() {
+        let fs = InMemoryFileSystem()
+        let line = claudeLine("2026-07-15T00:00:00.000Z", req: "r1", msg: "m1", tokens: 10) + "\n"
+        fs.addFile(path: "/claude/proj/s.jsonl", contents: Data(line.utf8), modified: now)
+        let cursors = InMemoryCursorStore()
+        let indexer = makeIndexer(fs, InMemoryUsageEventStore(now: { self.now }), cursors)
+        indexer.tick()
+        XCTAssertNotNil(cursors.load()["/claude/proj/s.jsonl"])
+        // Age the file out of the horizon; a later tick should drop its cursor entry.
+        fs.addFile(path: "/claude/proj/s.jsonl", contents: Data(line.utf8),
+                   modified: now.addingTimeInterval(-30*24*3600))
+        indexer.tick()
+        XCTAssertNil(cursors.load()["/claude/proj/s.jsonl"], "cursor for an aged-out file should be pruned")
+    }
 }

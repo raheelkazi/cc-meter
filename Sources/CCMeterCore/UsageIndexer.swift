@@ -91,8 +91,13 @@ public final class UsageIndexer {
 
         let claude = fileSystem.recursiveFiles(inDirectory: claudeProjectsDir, withSuffix: ".jsonl")
         let codex = fileSystem.recursiveFiles(inDirectory: codexSessionsDir, withSuffix: ".jsonl")
+        let recent = (claude + codex).filter { $0.modified >= cutoff }
+        // Drop cursors for files that aged out of the horizon or were deleted, so the cursor map
+        // stays bounded to currently-relevant files (Codex never deletes its rollout files).
+        let recentPaths = Set(recent.map(\.path))
+        state = state.filter { recentPaths.contains($0.key) }
 
-        for entry in (claude + codex) where entry.modified >= cutoff {
+        for entry in recent {
             let isCodex = entry.path.hasPrefix(codexSessionsDir)
             var cursor = state[entry.path] ?? FileCursor()
             if entry.size < cursor.offset {
