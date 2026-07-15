@@ -28,6 +28,10 @@ struct PopoverView: View {
         VStack(alignment: .leading, spacing: 10) {
             header
 
+            ForEach(statusBanners, id: \.provider) { status in
+                statusBanner(status)
+            }
+
             if tab == .usage, let usageModel {
                 UsageTabView(model: usageModel, showsCodex: dashboard.showsCodex)
             } else {
@@ -48,6 +52,42 @@ struct PopoverView: View {
         }
         .padding(14)
         .frame(width: 360)
+    }
+
+    // MARK: - Status banners
+
+    private var statusBanners: [ProviderStatus] {
+        // Gate Codex on visibility: the monitor polls OpenAI's status unauthenticated, so a
+        // signed-out Codex user must not see a banner for a provider whose block is hidden.
+        var providers: [UsageProvider] = [.claude]
+        if dashboard.showsCodex { providers.append(.codex) }
+        return providers.compactMap { dashboard.providerStatuses[$0] }.filter { $0.level != .ok }
+    }
+
+    @ViewBuilder private func statusBanner(_ status: ProviderStatus) -> some View {
+        Button {
+            if let url = status.url { NSWorkspace.shared.open(url) }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(status.level.color?.swiftUIColor ?? .secondary)
+                    .font(.system(size: 11, weight: .semibold))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("\(status.provider.displayName) - \(status.level == .major ? "major outage" : "degraded")")
+                        .font(.caption2.weight(.semibold))
+                    if let headline = status.headline {
+                        Text(headline).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+                    }
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "arrow.up.right").font(.caption2).foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 8)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill((status.level.color?.swiftUIColor ?? .secondary).opacity(0.12)))
+        }
+        .buttonStyle(.plain)
+        .help(status.url?.absoluteString ?? "")
     }
 
     private var header: some View {

@@ -53,7 +53,8 @@ final class MenuBarController {
         let presentation = MenuBarPresentation.make(
             summaries: dashboard.compactProviders,
             isLoading: dashboard.isLoading,
-            hasError: dashboard.hasError
+            hasError: dashboard.hasError,
+            statuses: dashboard.statusLevels
         )
         button.attributedTitle = Self.titleString(for: presentation)
         button.toolTip = presentation.tooltip
