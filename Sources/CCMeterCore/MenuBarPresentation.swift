@@ -18,19 +18,30 @@ public struct MenuBarPresentation: Equatable {
 
     public static func make(summaries: [ProviderCompactSummary],
                             isLoading: Bool,
-                            hasError: Bool) -> MenuBarPresentation {
+                            hasError: Bool,
+                            statuses: [UsageProvider: StatusLevel] = [:]) -> MenuBarPresentation {
         guard !summaries.isEmpty else {
             let title = isLoading ? "CC ..." : (hasError ? "CC !" : "CC")
-            return MenuBarPresentation(segments: [MenuBarTitleSegment(text: title)],
-                                       tooltip: nil)
+            return MenuBarPresentation(segments: [MenuBarTitleSegment(text: title)], tooltip: nil)
         }
 
         let tooltip = summaries
             .map { "\($0.provider.displayName) \($0.percent)% used" }
             .joined(separator: " · ")
+
+        // The status glyph replaces the usage dot when a provider is degraded: green dot -> colored ⚠.
+        func mark(for summary: ProviderCompactSummary) -> MenuBarTitleSegment {
+            let level = statuses[summary.provider] ?? .ok
+            if let color = level.color {
+                return MenuBarTitleSegment(text: "⚠", color: color)
+            }
+            return MenuBarTitleSegment(text: "●", color: summary.color)
+        }
+
         if summaries.count == 1, let summary = summaries.first {
+            let dot = mark(for: summary)
             return MenuBarPresentation(segments: [
-                MenuBarTitleSegment(text: "● ", color: summary.color),
+                MenuBarTitleSegment(text: dot.text + " ", color: dot.color),
                 MenuBarTitleSegment(text: "\(summary.percent)%")
             ], tooltip: tooltip)
         }
@@ -39,7 +50,7 @@ public struct MenuBarPresentation: Equatable {
         for (index, summary) in summaries.enumerated() {
             if index > 0 { segments.append(MenuBarTitleSegment(text: " · ")) }
             segments.append(MenuBarTitleSegment(text: "\(abbreviation(for: summary.provider)) "))
-            segments.append(MenuBarTitleSegment(text: "●", color: summary.color))
+            segments.append(mark(for: summary))
             segments.append(MenuBarTitleSegment(text: " \(summary.percent)%"))
         }
         return MenuBarPresentation(segments: segments, tooltip: tooltip)
