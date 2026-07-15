@@ -1,0 +1,1098 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>cc-meter feature mockups</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #ecefeb;
+      --ink: #1b1f24;
+      --muted: #6d747d;
+      --line: #d7dbd7;
+      --panel: #f9faf8;
+      --panel-2: #f1f4f1;
+      --green: #20a66a;
+      --green-soft: #dff3e8;
+      --amber: #c68420;
+      --amber-soft: #f7ead1;
+      --red: #d24d3e;
+      --red-soft: #f6dfdc;
+      --blue: #3578d4;
+      --blue-soft: #dbe9fb;
+      --teal: #108b8f;
+      --teal-soft: #d8eeee;
+      --shadow: 0 22px 60px rgba(27, 31, 36, .13);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, .62), rgba(255, 255, 255, 0) 360px),
+        var(--bg);
+      color: var(--ink);
+    }
+
+    .page {
+      width: 1480px;
+      margin: 0 auto;
+      padding: 34px 38px 44px;
+    }
+
+    .top {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 28px;
+      margin-bottom: 26px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 34px;
+      letter-spacing: 0;
+      line-height: 1.08;
+    }
+
+    .intro {
+      margin: 8px 0 0;
+      width: 820px;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.45;
+    }
+
+    .baseline {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 9px 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, .66);
+      box-shadow: 0 8px 24px rgba(27, 31, 36, .06);
+      white-space: nowrap;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--amber);
+      box-shadow: 0 0 0 4px rgba(198, 132, 32, .14);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 22px;
+    }
+
+    .overview {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+
+    .overview-card {
+      min-height: 132px;
+      padding: 15px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, .72);
+      box-shadow: 0 14px 36px rgba(27, 31, 36, .09);
+    }
+
+    .overview-card.primary {
+      background: #1f2933;
+      border-color: #1f2933;
+      color: white;
+    }
+
+    .overview-card h3 {
+      margin: 0;
+      font-size: 15px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    .overview-card p {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.36;
+    }
+
+    .overview-card.primary p { color: rgba(255, 255, 255, .78); }
+
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin-top: 13px;
+    }
+
+    .summary-pill,
+    .scan-item,
+    .meta span {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 750;
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    .summary-pill {
+      gap: 6px;
+      padding: 7px 8px;
+      background: rgba(255, 255, 255, .15);
+      color: white;
+    }
+
+    .overview-card:not(.primary) .summary-pill {
+      background: var(--panel-2);
+      color: #37404a;
+      border: 1px solid rgba(27,31,36,.08);
+    }
+
+    .summary-pill strong {
+      display: inline-grid;
+      place-items: center;
+      width: 19px;
+      height: 19px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, .22);
+      font-size: 10px;
+    }
+
+    .overview-card:not(.primary) .summary-pill strong {
+      background: #1f2933;
+      color: white;
+    }
+
+    .scan-strip {
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+
+    .scan-item {
+      min-height: 66px;
+      align-items: flex-start;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 9px;
+      border-radius: 12px;
+      border: 1px solid rgba(27,31,36,.09);
+      background: rgba(255, 255, 255, .72);
+      color: #2d3540;
+      box-shadow: 0 8px 20px rgba(27, 31, 36, .06);
+      text-decoration: none;
+      white-space: normal;
+    }
+
+    .scan-item strong {
+      display: inline-grid;
+      place-items: center;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #1f2933;
+      color: white;
+      font-size: 10px;
+      margin-bottom: 5px;
+    }
+
+    .scan-item span {
+      font-size: 11px;
+      line-height: 1.15;
+      font-weight: 800;
+    }
+
+    .feature {
+      min-height: 315px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, .72);
+      box-shadow: var(--shadow);
+      display: grid;
+      grid-template-columns: 245px 1fr;
+      gap: 18px;
+      overflow: hidden;
+    }
+
+    .copy {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 4px 0;
+    }
+
+    .number {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #1f2933;
+      color: white;
+      font-weight: 700;
+      font-size: 13px;
+      margin-bottom: 11px;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 20px;
+      line-height: 1.15;
+      letter-spacing: 0;
+    }
+
+    .copy p {
+      margin: 9px 0 0;
+      color: var(--muted);
+      line-height: 1.42;
+      font-size: 14px;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 12px;
+    }
+
+    .meta span {
+      padding: 6px 7px;
+      background: var(--panel-2);
+      border: 1px solid rgba(27,31,36,.07);
+      color: #424a53;
+    }
+
+    .meta .first { background: var(--green-soft); color: #137243; }
+    .meta .visual { background: var(--blue-soft); color: #20589d; }
+    .meta .workflow { background: var(--amber-soft); color: #825310; }
+    .meta .risk { background: var(--red-soft); color: #982f25; }
+
+    .impact {
+      margin-top: 16px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: var(--panel-2);
+      color: #37404a;
+      font-size: 13px;
+      line-height: 1.35;
+      border: 1px solid rgba(27, 31, 36, .06);
+    }
+
+    .mock {
+      align-self: center;
+      justify-self: center;
+      width: 390px;
+      min-height: 268px;
+      border: 1px solid rgba(27, 31, 36, .14);
+      border-radius: 18px;
+      background: var(--panel);
+      box-shadow: 0 18px 44px rgba(27, 31, 36, .18);
+      overflow: hidden;
+    }
+
+    .mock.wide { width: 410px; }
+    .mock.short { min-height: 236px; }
+
+    .windowbar {
+      height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      background: rgba(242, 244, 243, .92);
+      border-bottom: 1px solid rgba(27, 31, 36, .09);
+      font-size: 12px;
+      color: #525a63;
+      font-weight: 600;
+    }
+
+    .traffic {
+      display: flex;
+      gap: 6px;
+    }
+
+    .traffic span {
+      display: block;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+    }
+
+    .traffic span:nth-child(1) { background: #f15b51; }
+    .traffic span:nth-child(2) { background: #f2bd39; }
+    .traffic span:nth-child(3) { background: #45c65a; }
+
+    .mockbody {
+      padding: 14px;
+    }
+
+    .bar {
+      height: 9px;
+      border-radius: 999px;
+      background: #dde2de;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .bar > span {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--green);
+    }
+
+    .bar.amber > span { background: var(--amber); }
+    .bar.red > span { background: var(--red); }
+    .bar.blue > span { background: var(--blue); }
+    .bar.teal > span { background: var(--teal); }
+
+    .row {
+      display: grid;
+      grid-template-columns: 98px 1fr 52px;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 0;
+      border-bottom: 1px solid rgba(27, 31, 36, .08);
+      font-size: 13px;
+    }
+
+    .row:last-child { border-bottom: 0; }
+
+    .pct {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+    }
+
+    .sub {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 112px 1fr;
+      gap: 14px;
+      align-items: center;
+    }
+
+    .ring {
+      width: 110px;
+      height: 110px;
+      border-radius: 50%;
+      background: conic-gradient(var(--amber) 0 76%, #e2e6e1 76% 100%);
+      display: grid;
+      place-items: center;
+      position: relative;
+    }
+
+    .ring::after {
+      content: "";
+      width: 76px;
+      height: 76px;
+      border-radius: 50%;
+      background: var(--panel);
+      position: absolute;
+    }
+
+    .ring strong {
+      position: relative;
+      z-index: 1;
+      font-size: 25px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .headline {
+      font-size: 18px;
+      font-weight: 800;
+      line-height: 1.1;
+      margin: 0;
+    }
+
+    .headline small {
+      display: block;
+      margin-top: 7px;
+      font-size: 12px;
+      line-height: 1.25;
+      font-weight: 500;
+      color: var(--muted);
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin-top: 12px;
+    }
+
+    .chip {
+      border-radius: 999px;
+      padding: 5px 8px;
+      background: var(--panel-2);
+      border: 1px solid rgba(27, 31, 36, .08);
+      color: #424a53;
+      font-size: 11px;
+      font-weight: 650;
+    }
+
+    .chip.green { background: var(--green-soft); color: #137243; }
+    .chip.amber { background: var(--amber-soft); color: #825310; }
+    .chip.red { background: var(--red-soft); color: #982f25; }
+    .chip.blue { background: var(--blue-soft); color: #20589d; }
+    .chip.teal { background: var(--teal-soft); color: #0b6367; }
+
+    .timeline {
+      margin-top: 12px;
+      padding-top: 3px;
+    }
+
+    .track {
+      position: relative;
+      height: 36px;
+      border-radius: 12px;
+      background:
+        linear-gradient(90deg, var(--green-soft) 0 42%, var(--amber-soft) 42% 72%, var(--red-soft) 72% 100%);
+      border: 1px solid rgba(27, 31, 36, .08);
+      overflow: hidden;
+    }
+
+    .track .fill {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 68%;
+      background: linear-gradient(90deg, rgba(32, 166, 106, .26), rgba(198, 132, 32, .26));
+    }
+
+    .marker {
+      position: absolute;
+      top: -3px;
+      bottom: -3px;
+      width: 2px;
+      background: #1b1f24;
+    }
+
+    .marker.now { left: 61%; }
+    .marker.limit { left: 86%; background: var(--red); }
+
+    .ticks {
+      display: flex;
+      justify-content: space-between;
+      color: var(--muted);
+      font-size: 11px;
+      margin-top: 6px;
+    }
+
+    .pace {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .metric {
+      padding: 10px;
+      border-radius: 12px;
+      background: var(--panel-2);
+      border: 1px solid rgba(27, 31, 36, .07);
+    }
+
+    .metric span {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      margin-bottom: 5px;
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 16px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .menubar {
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: end;
+      gap: 10px;
+      padding: 0 10px;
+      border-radius: 10px;
+      background: rgba(255,255,255,.82);
+      border: 1px solid rgba(27,31,36,.12);
+      box-shadow: 0 8px 20px rgba(27,31,36,.09);
+      font-size: 12px;
+      margin-bottom: 12px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      background: #1f2933;
+      color: white;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .badge .tiny-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--amber);
+    }
+
+    .modes {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+
+    .mode {
+      min-height: 72px;
+      border-radius: 12px;
+      background: var(--panel-2);
+      border: 1px solid rgba(27,31,36,.08);
+      padding: 10px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .mode strong {
+      display: block;
+      color: var(--ink);
+      font-size: 19px;
+      margin-top: 6px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .heat {
+      display: grid;
+      grid-template-columns: repeat(14, 1fr);
+      gap: 5px;
+      margin-top: 8px;
+    }
+
+    .cell {
+      height: 16px;
+      border-radius: 4px;
+      background: #dde3df;
+    }
+
+    .cell.a { background: #bfe6d0; }
+    .cell.b { background: #74c99e; }
+    .cell.c { background: #e9c277; }
+    .cell.d { background: #e57e70; }
+
+    .legend {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--muted);
+      font-size: 11px;
+      margin-top: 9px;
+    }
+
+    .stack {
+      display: flex;
+      align-items: end;
+      gap: 9px;
+      height: 96px;
+      margin-top: 8px;
+      padding: 10px 8px 0;
+      border-radius: 12px;
+      background: var(--panel-2);
+      border: 1px solid rgba(27,31,36,.08);
+    }
+
+    .stack > div {
+      flex: 1;
+      border-radius: 9px 9px 0 0;
+      min-height: 18px;
+      display: flex;
+      align-items: end;
+      justify-content: center;
+      color: white;
+      font-size: 11px;
+      font-weight: 800;
+      padding-bottom: 5px;
+    }
+
+    .spend {
+      display: grid;
+      grid-template-columns: 1fr 120px;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .coin {
+      width: 104px;
+      height: 104px;
+      border-radius: 50%;
+      background: conic-gradient(var(--teal) 0 62%, #dde3df 62% 100%);
+      display: grid;
+      place-items: center;
+      justify-self: end;
+    }
+
+    .coin span {
+      width: 74px;
+      height: 74px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: var(--panel);
+      font-size: 18px;
+      font-weight: 850;
+      color: var(--teal);
+    }
+
+    .notice {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 10px;
+      border-radius: 12px;
+      background: var(--red-soft);
+      color: #7e281f;
+      border: 1px solid rgba(210, 77, 62, .28);
+      font-size: 12px;
+      line-height: 1.25;
+      margin-bottom: 10px;
+    }
+
+    .notice strong {
+      color: #6e2019;
+      font-size: 13px;
+    }
+
+    .buttonrow {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .btn {
+      border: 1px solid rgba(27,31,36,.14);
+      border-radius: 9px;
+      padding: 7px 10px;
+      background: #fff;
+      font-size: 12px;
+      color: #2f3740;
+      font-weight: 650;
+    }
+
+    .btn.primary {
+      background: #1f2933;
+      color: #fff;
+      border-color: #1f2933;
+    }
+
+    .sliders {
+      display: grid;
+      gap: 13px;
+      margin-top: 8px;
+    }
+
+    .sliderrow {
+      display: grid;
+      grid-template-columns: 80px 1fr 42px;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+    }
+
+    .slider {
+      height: 6px;
+      border-radius: 999px;
+      background: #dfe5e0;
+      position: relative;
+    }
+
+    .slider span {
+      position: absolute;
+      top: -5px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: white;
+      border: 2px solid var(--blue);
+      box-shadow: 0 2px 8px rgba(27,31,36,.18);
+    }
+
+    .segmented {
+      display: flex;
+      padding: 3px;
+      border-radius: 10px;
+      background: #e2e7e3;
+      gap: 3px;
+      margin-bottom: 12px;
+    }
+
+    .segmented span {
+      flex: 1;
+      text-align: center;
+      padding: 6px;
+      border-radius: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 650;
+    }
+
+    .segmented span.active {
+      background: white;
+      color: var(--ink);
+      box-shadow: 0 2px 8px rgba(27,31,36,.08);
+    }
+
+    .state {
+      text-align: center;
+      padding: 16px 8px 12px;
+    }
+
+    .stateicon {
+      width: 58px;
+      height: 58px;
+      border-radius: 18px;
+      margin: 0 auto 12px;
+      display: grid;
+      place-items: center;
+      background: var(--blue-soft);
+      color: var(--blue);
+      font-weight: 900;
+      font-size: 24px;
+    }
+
+    .minirows {
+      margin-top: 10px;
+      border-top: 1px solid rgba(27,31,36,.08);
+      padding-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="top">
+      <div>
+        <h1>cc-meter: 10 feature and visual upgrade mockups</h1>
+        <p class="intro">Each concept keeps the app anchored to the native menu bar popover, but makes the current data more useful. The first screen now works as a skim layer; the cards below are for deeper visual review.</p>
+      </div>
+      <div class="baseline"><span class="dot"></span> Current baseline: compact list, bars, reset countdowns, burn text, sparklines, spend, settings</div>
+    </section>
+
+    <section class="overview" aria-label="At-a-glance recommendation">
+      <div class="overview-card primary">
+        <h3>Best first wave</h3>
+        <p>These make the app answer the core question fastest: can I keep working, and is the data trustworthy?</p>
+        <div class="pill-row">
+          <span class="summary-pill"><strong>1</strong> Risk header</span>
+          <span class="summary-pill"><strong>3</strong> Pace rows</span>
+          <span class="summary-pill"><strong>9</strong> Stale snapshot</span>
+        </div>
+      </div>
+      <div class="overview-card">
+        <h3>Most visual</h3>
+        <p>These make rolling limits, history, and model pressure instantly legible.</p>
+        <div class="pill-row">
+          <span class="summary-pill"><strong>2</strong> Timeline</span>
+          <span class="summary-pill"><strong>5</strong> Heatmap</span>
+          <span class="summary-pill"><strong>6</strong> Model stack</span>
+        </div>
+      </div>
+      <div class="overview-card">
+        <h3>Power-user value</h3>
+        <p>These add configuration, workflow actions, and cost visibility once the core readout is clear.</p>
+        <div class="pill-row">
+          <span class="summary-pill"><strong>4</strong> Menu modes</span>
+          <span class="summary-pill"><strong>7</strong> Spend</span>
+          <span class="summary-pill"><strong>8</strong> Warning actions</span>
+          <span class="summary-pill"><strong>10</strong> Presets</span>
+        </div>
+      </div>
+      <div class="overview-card">
+        <h3>How to review</h3>
+        <p>Use the strip below to scan all concepts in seconds. Then inspect only the mocks that match the decision you are trying to make.</p>
+        <div class="pill-row">
+          <span class="summary-pill"><strong>H</strong> High impact</span>
+          <span class="summary-pill"><strong>M</strong> Medium effort</span>
+        </div>
+      </div>
+    </section>
+
+    <nav class="scan-strip" aria-label="Concept index">
+      <a class="scan-item" href="#feature-1"><strong>1</strong><span>Risk header</span></a>
+      <a class="scan-item" href="#feature-2"><strong>2</strong><span>Reset timeline</span></a>
+      <a class="scan-item" href="#feature-3"><strong>3</strong><span>Pace rows</span></a>
+      <a class="scan-item" href="#feature-4"><strong>4</strong><span>Menu modes</span></a>
+      <a class="scan-item" href="#feature-5"><strong>5</strong><span>Heatmap</span></a>
+      <a class="scan-item" href="#feature-6"><strong>6</strong><span>Model stack</span></a>
+      <a class="scan-item" href="#feature-7"><strong>7</strong><span>Spend forecast</span></a>
+      <a class="scan-item" href="#feature-8"><strong>8</strong><span>Warning state</span></a>
+      <a class="scan-item" href="#feature-9"><strong>9</strong><span>Stale snapshot</span></a>
+      <a class="scan-item" href="#feature-10"><strong>10</strong><span>Settings presets</span></a>
+    </nav>
+
+    <section class="grid">
+      <article class="feature" id="feature-1">
+        <div class="copy">
+          <div>
+            <span class="number">1</span>
+            <h2>At-a-glance risk header</h2>
+            <div class="meta"><span class="first">First wave</span><span>High impact</span><span>Medium effort</span></div>
+            <p>Promote the most constrained limit into a top summary with a ring, plain-language status, and the next reset.</p>
+          </div>
+          <div class="impact">Impact: the user knows whether they can keep working before reading individual rows.</div>
+        </div>
+        <div class="mock">
+          <div class="windowbar"><div class="traffic"><span></span><span></span><span></span></div><span>Claude Code Usage</span></div>
+          <div class="mockbody">
+            <div class="hero">
+              <div class="ring"><strong>76%</strong></div>
+              <p class="headline">5-hour window is warm<small>At current pace, limit in 42m. Reset in 1h 18m.</small></p>
+            </div>
+            <div class="chips">
+              <span class="chip amber">Active</span><span class="chip red">+18%/h</span><span class="chip blue">Updated 12s ago</span>
+            </div>
+            <div class="minirows">
+              <div class="row"><span>7-day</span><div class="bar green"><span style="width:32%"></span></div><span class="pct">32%</span></div>
+              <div class="row"><span>Fable</span><div class="bar amber"><span style="width:54%"></span></div><span class="pct">54%</span></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="feature" id="feature-2">
+        <div class="copy">
+          <div>
+            <span class="number">2</span>
+            <h2>Reset timeline gauge</h2>
+            <div class="meta"><span class="visual">Most visual</span><span>High impact</span><span>Medium effort</span></div>
+            <p>Replace one plain countdown with a window timeline showing elapsed time, projected exhaustion, and reset.</p>
+          </div>
+          <div class="impact">Impact: makes rolling windows understandable instead of abstract percentages.</div>
+        </div>
+        <div class="mock wide short">
+          <div class="windowbar"><div class="traffic"><span></span><span></span><span></span></div><span>5-hour window</span></div>
+          <div class="mockbody">
+            <p class="headline">Session timeline<small>Now is ahead of the sustainable pace.</small></p>
+            <div class="timeline">
+              <div class="track"><div class="fill"></div><span class="marker now"></span><span class="marker limit"></span></div>
+              <div class="ticks"><span>Started 12:05</span><span>Now</span><span>Limit 2:32</span><span>Reset 3:18</span></div>
+            </div>
+            <div class="pace">
+              <div class="metric"><span>Used</span><strong>76%</strong></div>
+              <div class="metric"><span>Safe pace</span><strong>59%</strong></div>
+              <div class="metric"><span>Headroom</span><strong>-17%</strong></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="feature" id="feature-3">
+        <div class="copy">
+          <div>
+            <span class="number">3</span>
+            <h2>Pace-aware rows</h2>
+            <div class="meta"><span class="first">First wave</span><span>High impact</span><span>Low effort</span></div>
+            <p>Each row shows current burn rate against the pace needed to last until reset, not only raw percent.</p>
+          </div>
+          <div class="impact">Impact: separates harmless high usage from usage that will actually run out too soon.</div>
+        </div>
+        <div class="mock">
+          <div class="windowbar"><div class="traffic"><span></span><span></span><span></span></div><span>Pace view</span></div>
+          <div class="mockbody">
+            <div class="row"><span>5-hour<div class="sub">Reset 1h 18m</div></span><div><div class="bar amber"><span style="width:76%"></span></div><div class="sub">+18%/h now vs +10%/h safe</div></div><span class="pct">76%</span></div>
+            <div class="row"><span>7-day<div class="sub">Reset 2d 4h</div></span><div><div class="bar green"><span style="width:32%"></span></div><div class="sub">+1.3%/h now vs +1.8%/h safe</div></div><span class="pct">32%</span></div>
+            <div class="row"><span>Fable<div class="sub">Reset 4d 9h</div></span><div><div class="bar amber"><span style="width:54%"></span></div><div class="sub">+2.1%/h now vs +1.5%/h safe</div></div><span class="pct">54%</span></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="feature" id="feature-4">
+        <div class="copy">
+          <div>
+            <span class="number">4</span>
+            <h2>Menu bar display modes</h2>
+            <div class="meta"><span>Power-user</span><span>Medium impact</span><span>Medium effort</span></div>
+            <p>Add preferences for the status item: percent used, time to limit, time to reset, or compact ring.</p>
+          </div>
+          <div class="impact">Impact: lets power users tune the one thing they see all day without opening the popover.</div>
+        </div>
+        <div class="mock short">
+          <div class="windowbar"><div class="traffic"><span></span><span></span><span></span></div><span>Menu bar</span></div>
+          <div class="mockbody">
+            <div class="menubar"><span>Wi-Fi</span><span>84%</span><span class="badge"><span class="tiny-dot"></span>76%</span><span>1:54 PM</span></div>
+            <div class="modes">
+              <div class="mode">Percent used<strong><span style="color:var(--amber)">●</span> 76%</strong></div>
+              <div class="mode">Time to limit<strong>42m</strong></div>
+              <div class="mode">Time to reset<strong>1h 18m</strong></div>
+              <div class="mode">Remaining<strong>24%</strong></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="feature" id="feature-5">
+        <div class="copy">
+          <div>
+            <span class="number">5</span>
+            <h2>Seven-day usage heatmap</h2>
+            <div class="meta"><span class="visual">Most visual</span><span>Medium impact</span><span>Medium effort</span></div>
+            <p>Use the existing local history samples to show when usage spikes across the week.</p>
+          </div>
+          <div class="impact">Impact: turns history from tiny sparklines into a recognizable pattern for planning work.</div>
+        </div>
+        <div class="mock short">
+          <div class="windowbar"><div class="traffic"><span></span><span></span><span></span></div><span>History</span></div>
+          <div class="mockbody">
+            <p class="headline">Last 7 days<small>Session usage intensity by half-day blocks.</small></p>
+            <div class="heat">
+              <span class="cell"></span><span class="cell a"></span><span class="cell b"></span><span class="cell"></span><span class="cell c"></span><span class="cell c"></span><span class="cell a"></span><span class="cell"></span><span class="cell b"></span><span class="cell d"></span><span class="cell c"></span><span class="cell"></span><span class="cell a"></span><span class="cell b"></span>
+              <span class="cell a"></span><span class="cell b"></span><span class="cell c"></span><span class="cell"></span><span class="cell a"></span><span class="cell d"></span><span class="cell d"></span><span class="cell b"></span><span class="cell a"></span><span class="cell c"></span><span class="cell"></span><span class="cell"></span><span class="cell b"></span><span class="cell d"></span>
+              <span class="cell"></span><span class="cell"></span><span class="cell a"></span><span class="cell b"></span><span class="cell b"></span><span class="cell c"></span><span class="cell"></span><span class="cell a"></span><span class="cell a"></span><span class="cell b"></span><span class="cell c"></span><span class="cell d"></span><span class="cell b"></span><span class="cell a"></span>
+              <span class="cell b"></span><span class="cell c"></span><span class="cell d"></span><span class="cell c"></span><span class="cell a"></span><span class="cell"></span><span class="cell"></span><span class="cell a"></span><span class="cell b"></span><span class="cell b"></span><span class="cell c"></span><span class="cell"></span><span class="cell a"></span><span class="cell b"></span>
+            </div>
+            <div class="legend"><span>Lower</span><span>Today: heavy afternoon spike</span><span>Higher</span></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="feature" id="feature-6">
+        <div class="copy">
+          <div>
+            <span class="number">6</span>
+            <h2>Model limit stack</h2>
+            <div class="meta"><span class="visual">Most visual</span><span>Medium impact</span><span>Medium effort</span></div>
+            <p>Show per-model scoped limits as ranked bars, with the active model and tightest model called out.</p>
+          </div>
+          <div class="impact">Impact: makes model-specific throttling visible before the user hits a surprise cap.</div>
+        </div>
+        <div class="mock short">
+          <div class="windowbar"><div class="traffic"><span></span><span></span><span></span></div><span>Scoped limits</span></div>
+          <div class="mockbody">
+            <p class="headline">Model pressure<small>Fable is active and pacing above its weekly budget.</small></p>
+            <div class="stack">
+              <div style="height:84%;background:var(--amber)">Fable</div>
+              <div style="height:48%;background:var(--green)">Sonnet</div>
+              <div style="height:31%;background:var(--teal)">Haiku</div>
+              <div style="height:22%;background:var(--blue)">Opus</div>
+            </div>
+            <div class="chips"><span class="chip amber">Fable 54%</span><span class="chip green">All models 32%</span><span class="chip blue">4d 9h reset</span></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="feature" id="feature-7">
+        <div class="copy">
+          <div>
+            <span class="number">7</span>
+            <h2>Spend and extra-credit forecast</h2>
+            <div class="meta"><span>Power-user</span><span>Medium impact</span><span>Medium effort</span></div>
+            <p>Give the spend row a real treatment with cap progress, projected weekly spend, and extra-credit state.</p>
+          </div>
+          <div class="impact">Impact: makes cost exposure as glanceable as usage exposure when the endpoint reports spend.</div>
+        </div>
+        <div class="mock short">
+          <div class="windowbar"><div class="traffic"><span></span><span></span><span></span></div><span>Spend</span></div>
+          <div class="mockbody spend">
+            <div>
+              <p class="headline">$31.20 of $50<small>Projected $43 by reset at current pace.</small></p>
+              <div class="chips"><span class="chip teal">62% cap</span><span class="chip green">$18.80 left</span></div>
+              <div class="buttonrow"><span class="btn">Details</span><span class="btn primary">Notify at $40</span></div>
+            </div>
+            <div class="coin"><span>62%</span></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="feature" id="feature-8">
+        <div class="copy">
+          <div>
+            <span class="number">8</span>
+            <h2>Actionable warning state</h2>
+            <div class="meta"><span class="workflow">Workflow</span><span>High impact</span><span>Medium effort</span></div>
+            <p>When burn-rate is urgent, show a concise warning with snooze and reset-aware actions.</p>
+          </div>
+          <div class="impact">Impact: notifications become a small workflow, not just a passive alert.</div>
+        </div>
+        <div class="mock">
+          <div class="windowbar"><div class="traffic"><span></span><span></span><span></span></div><span>Warning</span></div>
+          <div class="mockbody">
+            <div class="notice"><span class="dot" style="background:var(--red);box-shadow:0 0 0 4px rgba(210,77,62,.16)"></span><div><strong>Likely to hit 5-hour limit in 42m.</strong><br>Reset is 1h 18m away. Slow down or wait for reset.</div></div>
+            <div class="row"><span>5-hour</span><div class="bar red"><span style="width:91%"></span></div><span class="pct">91%</span></div>
+            <div class="buttonrow"><span class="btn primary">Snooze 30m</span><span class="btn">Alert at reset</span><span class="btn">Refresh</span></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="feature" id="feature-9">
+        <div class="copy">
+          <div>
+            <span class="number">9</span>
+            <h2>Offline and stale snapshot</h2>
+            <div class="meta"><span class="first">First wave</span><span>High impact</span><span>Low effort</span></div>
+            <p>Keep last-known usage prominent during 429/network errors, with a clear backoff timer and source of truth.</p>
+          </div>
+          <div class="impact">Impact: avoids blank/error-only states when the last good data is still useful.</div>
+        </div>
+        <div class="mock short">
+          <div class="windowbar"><div class="traffic"><span></span><span></span><span></span></div><span>Stale data</span></div>
+          <div class="mockbody">
+            <div class="state">
+              <div class="stateicon">!</div>
+              <p class="headline">Using last good snapshot<small>Rate limited. Next automatic retry in 2m 14s.</small></p>
+            </div>
+            <div class="row"><span>5-hour</span><div class="bar amber"><span style="width:76%"></span></div><span class="pct">76%</span></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="feature" id="feature-10">
+        <div class="copy">
+          <div>
+            <span class="number">10</span>
+            <h2>Settings presets</h2>
+            <div class="meta"><span>Power-user</span><span>Medium impact</span><span>Medium effort</span></div>
+            <p>Replace scattered controls with profiles for quiet, balanced, and aggressive monitoring plus advanced overrides.</p>
+          </div>
+          <div class="impact">Impact: reduces setup friction while keeping precise thresholds for users who want them.</div>
+        </div>
+        <div class="mock">
+          <div class="windowbar"><div class="traffic"><span></span><span></span><span></span></div><span>Settings</span></div>
+          <div class="mockbody">
+            <div class="segmented"><span>Quiet</span><span class="active">Balanced</span><span>Strict</span></div>
+            <div class="sliders">
+              <div class="sliderrow"><span>Refresh</span><div class="slider"><span style="left:46%"></span></div><strong>180s</strong></div>
+              <div class="sliderrow"><span>Warn at</span><div class="slider"><span style="left:78%"></span></div><strong>80%</strong></div>
+              <div class="sliderrow"><span>Urgent</span><div class="slider"><span style="left:94%"></span></div><strong>95%</strong></div>
+            </div>
+            <div class="chips"><span class="chip blue">History on</span><span class="chip green">Launch at login</span><span class="chip amber">Reset heads-up 10m</span></div>
+          </div>
+        </div>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

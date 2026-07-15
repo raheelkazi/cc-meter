@@ -1,0 +1,1446 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>cc-meter next-wave feature mockups</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --page: #f2f4f7;
+      --surface: #ffffff;
+      --surface-soft: #f8fafc;
+      --ink: #17202a;
+      --muted: #66717e;
+      --faint: #8d97a3;
+      --line: #d7dde4;
+      --line-strong: #bcc6d1;
+      --blue: #2f6fec;
+      --blue-soft: #eaf0ff;
+      --green: #159c68;
+      --green-soft: #e5f5ed;
+      --amber: #c97d00;
+      --amber-soft: #fff2d8;
+      --red: #ca4744;
+      --red-soft: #fdebea;
+      --teal: #117f87;
+      --teal-soft: #e2f4f4;
+      --violet: #7458b3;
+      --violet-soft: #f0ebfa;
+      --shadow: 0 14px 34px rgba(27, 39, 51, .14), 0 2px 6px rgba(27, 39, 51, .10);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      background: var(--page);
+      color: var(--ink);
+    }
+
+    button, input { font: inherit; }
+
+    button { letter-spacing: 0; }
+
+    .page {
+      width: min(1440px, 100%);
+      margin: 0 auto;
+      padding: 34px 28px 64px;
+    }
+
+    .page-header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 32px;
+      align-items: end;
+      margin-bottom: 22px;
+    }
+
+    h1, h2, h3, p { margin: 0; }
+
+    h1 {
+      max-width: 760px;
+      font-size: 38px;
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+
+    .intro {
+      max-width: 760px;
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.55;
+    }
+
+    .baseline {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      min-height: 36px;
+      padding: 8px 11px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .live-dot, .dot {
+      width: 8px;
+      height: 8px;
+      flex: 0 0 auto;
+      border-radius: 50%;
+      background: var(--green);
+    }
+
+    .overview {
+      display: grid;
+      grid-template-columns: 1.15fr 1fr 1fr;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      overflow: hidden;
+    }
+
+    .overview-group {
+      min-height: 132px;
+      padding: 18px;
+      border-right: 1px solid var(--line);
+    }
+
+    .overview-group:last-child { border-right: 0; }
+
+    .overview-group.primary {
+      border-top: 4px solid var(--blue);
+      padding-top: 14px;
+    }
+
+    .overview-group.workflow {
+      border-top: 4px solid var(--green);
+      padding-top: 14px;
+    }
+
+    .overview-group.bet {
+      border-top: 4px solid var(--violet);
+      padding-top: 14px;
+    }
+
+    .eyebrow {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .overview h2 {
+      margin-top: 4px;
+      font-size: 17px;
+      line-height: 1.25;
+    }
+
+    .overview p {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .pick-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 12px;
+    }
+
+    .pick {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 7px;
+      border-radius: 6px;
+      background: var(--surface-soft);
+      border: 1px solid var(--line);
+      color: #33404d;
+      font-size: 11px;
+      font-weight: 650;
+    }
+
+    .pick b {
+      display: grid;
+      width: 18px;
+      height: 18px;
+      place-items: center;
+      border-radius: 5px;
+      background: var(--ink);
+      color: white;
+      font-size: 10px;
+    }
+
+    .toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      margin: 18px 0;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255,255,255,.96);
+      box-shadow: 0 4px 16px rgba(27,39,51,.08);
+    }
+
+    .filters {
+      display: inline-flex;
+      padding: 3px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface-soft);
+    }
+
+    .filter {
+      min-height: 30px;
+      padding: 5px 11px;
+      border: 0;
+      border-radius: 5px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .filter.active {
+      background: var(--surface);
+      color: var(--ink);
+      box-shadow: 0 1px 4px rgba(27,39,51,.14);
+    }
+
+    .toolbar-note {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .scan-strip {
+      display: grid;
+      grid-template-columns: repeat(10, minmax(86px, 1fr));
+      gap: 6px;
+      margin-bottom: 18px;
+      overflow-x: auto;
+      scrollbar-width: thin;
+    }
+
+    .scan-item {
+      min-width: 86px;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface);
+      color: var(--ink);
+      text-decoration: none;
+    }
+
+    .scan-item strong {
+      display: block;
+      color: var(--blue);
+      font-size: 17px;
+    }
+
+    .scan-item span {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1.25;
+    }
+
+    .concept-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .concept {
+      display: grid;
+      grid-template-columns: minmax(160px, .58fr) minmax(360px, 1fr);
+      min-width: 0;
+      min-height: 480px;
+      scroll-margin-top: 76px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      overflow: hidden;
+    }
+
+    .concept[hidden] { display: none; }
+
+    .concept-copy {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 18px 16px;
+      border-right: 1px solid var(--line);
+    }
+
+    .number {
+      display: grid;
+      width: 30px;
+      height: 30px;
+      place-items: center;
+      border-radius: 7px;
+      background: var(--ink);
+      color: white;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .concept h2 {
+      margin-top: 13px;
+      font-size: 19px;
+      line-height: 1.16;
+    }
+
+    .concept-copy p {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 12px;
+    }
+
+    .meta span {
+      padding: 4px 6px;
+      border-radius: 5px;
+      background: var(--surface-soft);
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .meta .high { background: var(--green-soft); border-color: #bce3cf; color: #08724a; }
+    .meta .bet { background: var(--violet-soft); border-color: #d9ccef; color: #65429e; }
+
+    .impact {
+      padding-top: 11px;
+      border-top: 1px solid var(--line);
+      color: #384653;
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    .stage {
+      display: grid;
+      min-width: 0;
+      place-items: start center;
+      padding: 16px 12px 18px;
+      background: #dce7ef;
+      overflow: hidden;
+    }
+
+    .desktop {
+      width: min(100%, 380px);
+      min-width: 0;
+    }
+
+    .desktop-bar {
+      display: flex;
+      height: 28px;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+      padding: 0 7px;
+      border-radius: 7px 7px 0 0;
+      background: rgba(242,248,252,.92);
+      color: #4f6271;
+      font-size: 10px;
+      box-shadow: 0 1px 0 rgba(54,75,90,.12);
+    }
+
+    .menu-meter {
+      display: inline-flex;
+      height: 21px;
+      align-items: center;
+      gap: 5px;
+      padding: 0 7px;
+      border-radius: 5px;
+      background: #263847;
+      color: white;
+      font-weight: 700;
+    }
+
+    .menu-meter .dot { width: 6px; height: 6px; }
+
+    .popover {
+      position: relative;
+      width: min(340px, calc(100% - 12px));
+      min-height: 390px;
+      margin: 8px auto 0;
+      padding: 14px;
+      border: 1px solid rgba(71,91,106,.38);
+      border-radius: 8px;
+      background: rgba(251,252,253,.98);
+      box-shadow: var(--shadow);
+    }
+
+    .popover::before {
+      content: "";
+      position: absolute;
+      top: -7px;
+      right: 56px;
+      width: 12px;
+      height: 12px;
+      transform: rotate(45deg);
+      border-top: 1px solid rgba(71,91,106,.38);
+      border-left: 1px solid rgba(71,91,106,.38);
+      background: #fbfcfd;
+    }
+
+    .app-head, .row-between {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .app-head {
+      min-height: 24px;
+      font-size: 13px;
+      font-weight: 750;
+    }
+
+    .mode-button, .small-button, .primary-button, .danger-button {
+      min-height: 26px;
+      border: 1px solid var(--line-strong);
+      border-radius: 6px;
+      background: var(--surface);
+      color: #374553;
+      cursor: pointer;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .mode-button, .small-button { padding: 4px 8px; }
+
+    .primary-button {
+      padding: 5px 10px;
+      border-color: #285fca;
+      background: var(--blue);
+      color: white;
+    }
+
+    .danger-button {
+      padding: 4px 8px;
+      border-color: #e1aaa8;
+      background: var(--red-soft);
+      color: #a62e2b;
+    }
+
+    .tabs, .segment {
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: 1fr;
+      gap: 3px;
+      margin-top: 11px;
+      padding: 3px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #edf1f4;
+    }
+
+    .tabs span, .segment button {
+      min-height: 25px;
+      display: grid;
+      place-items: center;
+      border: 0;
+      border-radius: 5px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .segment button { cursor: pointer; }
+
+    .tabs .active, .segment button.active {
+      background: var(--surface);
+      color: var(--ink);
+      box-shadow: 0 1px 3px rgba(28,42,54,.16);
+    }
+
+    .mock-section { margin-top: 13px; }
+
+    .mock-label {
+      color: var(--muted);
+      font-size: 9px;
+      font-weight: 750;
+      text-transform: uppercase;
+    }
+
+    .mock-title {
+      margin-top: 3px;
+      font-size: 17px;
+      line-height: 1.2;
+    }
+
+    .mock-subtitle {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1.35;
+    }
+
+    .result-band, .notice, .soft-band {
+      margin-top: 12px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface-soft);
+    }
+
+    .result-band.amber { border-color: #edcf95; background: var(--amber-soft); }
+    .result-band.green { border-color: #b9dfcc; background: var(--green-soft); }
+    .notice.red { border-color: #e8b8b6; background: var(--red-soft); }
+
+    .result-value {
+      display: block;
+      margin-top: 3px;
+      font-size: 22px;
+      line-height: 1;
+      font-weight: 780;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .result-note {
+      display: block;
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1.35;
+    }
+
+    .meter-track {
+      position: relative;
+      height: 9px;
+      margin-top: 12px;
+      border-radius: 4px;
+      background: #dfe4e9;
+      overflow: hidden;
+    }
+
+    .meter-track span {
+      position: absolute;
+      inset: 0 auto 0 0;
+      border-radius: 4px;
+      background: var(--green);
+    }
+
+    .meter-track .amber-fill { background: var(--amber); }
+    .meter-track .red-fill { background: var(--red); }
+    .meter-track .blue-fill { background: var(--blue); }
+
+    .ticks, .mini-stats {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 9px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .mini-stats {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid var(--line);
+    }
+
+    .mini-stats div { min-width: 0; }
+    .mini-stats strong { display: block; margin-top: 2px; color: var(--ink); font-size: 11px; }
+
+    .confidence {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      color: #19714f;
+      font-size: 9px;
+      font-weight: 700;
+    }
+
+    .confidence i {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--green);
+    }
+
+    .reserve-track {
+      display: grid;
+      grid-template-columns: 48fr 27fr 25fr;
+      height: 16px;
+      margin-top: 13px;
+      overflow: hidden;
+      border: 1px solid var(--line-strong);
+      border-radius: 5px;
+    }
+
+    .reserve-used { background: var(--amber); }
+    .reserve-free { background: #dce4ea; }
+    .reserve-held {
+      display: grid;
+      place-items: center;
+      background: #8164bd;
+      color: white;
+      font-size: 8px;
+      font-weight: 800;
+    }
+
+    .range-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+      margin-top: 16px;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--violet);
+    }
+
+    .range-value {
+      min-width: 38px;
+      text-align: right;
+      color: var(--violet);
+      font-size: 12px;
+      font-weight: 780;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .week-strip {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 6px;
+      margin-top: 14px;
+    }
+
+    .day {
+      position: relative;
+      height: 74px;
+      padding: 7px 5px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 8px;
+      text-align: center;
+    }
+
+    .day .work {
+      position: absolute;
+      right: 7px;
+      bottom: 8px;
+      left: 7px;
+      height: 34px;
+      border-radius: 4px;
+      background: var(--blue-soft);
+      border: 1px solid #bacaf3;
+    }
+
+    .day.today { border-color: #8ea9ec; }
+    .day.today .work { background: #cddafd; }
+    .day.exhaust .work { height: 20px; background: var(--red-soft); border-color: #e2aaa8; }
+    .day.exhaust::after {
+      content: "2:40";
+      position: absolute;
+      right: 0;
+      bottom: 31px;
+      left: 0;
+      color: var(--red);
+      font-size: 8px;
+      font-weight: 800;
+    }
+
+    .forecast-line {
+      position: relative;
+      height: 28px;
+      margin-top: 20px;
+    }
+
+    .forecast-line::before {
+      content: "";
+      position: absolute;
+      top: 11px;
+      right: 0;
+      left: 0;
+      height: 4px;
+      border-radius: 3px;
+      background: #dce2e8;
+    }
+
+    .forecast-range {
+      position: absolute;
+      top: 6px;
+      left: 40%;
+      width: 27%;
+      height: 14px;
+      border-radius: 5px;
+      background: var(--amber-soft);
+      border: 1px solid #e2b968;
+    }
+
+    .forecast-now, .forecast-reset {
+      position: absolute;
+      top: 4px;
+      width: 2px;
+      height: 18px;
+      background: var(--ink);
+    }
+
+    .forecast-now { left: 13%; }
+    .forecast-reset { right: 2%; background: var(--blue); }
+
+    .agent-list, .provider-list, .project-list, .integration-list, .model-list {
+      margin-top: 11px;
+      border-top: 1px solid var(--line);
+    }
+
+    .agent, .provider, .integration, .model-row {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      min-height: 43px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .agent-mark, .provider-mark {
+      display: grid;
+      width: 25px;
+      height: 25px;
+      place-items: center;
+      border-radius: 6px;
+      background: var(--blue-soft);
+      color: var(--blue);
+      font-size: 9px;
+      font-weight: 850;
+    }
+
+    .agent-main strong, .provider-main strong, .integration-main strong, .model-main strong {
+      display: block;
+      overflow: hidden;
+      font-size: 10px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .agent-main span, .provider-main span, .integration-main span, .model-main span {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 8px;
+    }
+
+    .agent-state {
+      color: var(--green);
+      font-size: 9px;
+      font-weight: 750;
+    }
+
+    .agent-state.hot { color: var(--red); }
+
+    .project-row {
+      display: grid;
+      grid-template-columns: 92px minmax(0, 1fr) 30px;
+      gap: 8px;
+      align-items: center;
+      min-height: 42px;
+      border-bottom: 1px solid var(--line);
+      font-size: 9px;
+    }
+
+    .project-row strong {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .bar {
+      height: 7px;
+      overflow: hidden;
+      border-radius: 4px;
+      background: #e0e5ea;
+    }
+
+    .bar span { display: block; height: 100%; border-radius: 4px; background: var(--teal); }
+    .project-row em { color: var(--muted); font-style: normal; text-align: right; }
+
+    .estimate {
+      display: inline-flex;
+      margin-top: 10px;
+      padding: 4px 6px;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      color: var(--muted);
+      font-size: 8px;
+    }
+
+    .model-row { grid-template-columns: minmax(0, 1fr) 78px 48px; }
+
+    .model-meter {
+      height: 6px;
+      overflow: hidden;
+      border-radius: 4px;
+      background: #dfe4e9;
+    }
+
+    .model-meter span { display: block; height: 100%; border-radius: 4px; background: var(--green); }
+    .model-meter.amber span { background: var(--amber); }
+    .model-meter.red span { background: var(--red); }
+    .model-left { color: var(--muted); font-size: 9px; text-align: right; }
+
+    .recommendation {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 11px;
+      padding: 9px;
+      border: 1px solid #b9dfcc;
+      border-radius: 7px;
+      background: var(--green-soft);
+      color: #146846;
+      font-size: 9px;
+      font-weight: 700;
+    }
+
+    .countdown {
+      margin-top: 24px;
+      text-align: center;
+    }
+
+    .countdown strong {
+      display: block;
+      font-size: 47px;
+      line-height: 1;
+      font-weight: 720;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .countdown span {
+      display: block;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 10px;
+    }
+
+    .recovery-actions {
+      display: flex;
+      justify-content: center;
+      gap: 7px;
+      margin-top: 18px;
+    }
+
+    .next-block {
+      margin-top: 18px;
+      padding-top: 12px;
+      border-top: 1px solid var(--line);
+      text-align: center;
+      color: var(--muted);
+      font-size: 9px;
+    }
+
+    .next-block strong { color: var(--ink); }
+
+    .terminal {
+      margin-top: 12px;
+      padding: 11px;
+      border: 1px solid #263847;
+      border-radius: 7px;
+      background: #17222c;
+      color: #d9e5ed;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 9px;
+      line-height: 1.55;
+      overflow: hidden;
+    }
+
+    .terminal .prompt { color: #76d5a9; }
+    .terminal .warn { color: #f2be68; }
+
+    .integration { grid-template-columns: minmax(0, 1fr) auto; }
+
+    .switch {
+      width: 30px;
+      height: 17px;
+      padding: 2px;
+      border-radius: 10px;
+      background: var(--green);
+    }
+
+    .switch::after {
+      content: "";
+      display: block;
+      width: 13px;
+      height: 13px;
+      margin-left: 13px;
+      border-radius: 50%;
+      background: white;
+    }
+
+    .provider { grid-template-columns: auto minmax(0, 1fr) 56px; }
+    .provider-mark.codex { background: var(--green-soft); color: var(--green); }
+    .provider-mark.gemini { background: var(--violet-soft); color: var(--violet); }
+    .provider-runway { font-size: 10px; font-weight: 800; text-align: right; }
+    .provider-runway.safe { color: var(--green); }
+    .provider-runway.tight { color: var(--red); }
+
+    .best-provider {
+      margin-top: 12px;
+      padding: 10px;
+      border-left: 4px solid var(--violet);
+      border-radius: 0 7px 7px 0;
+      background: var(--violet-soft);
+    }
+
+    .best-provider strong { display: block; font-size: 11px; }
+    .best-provider span { display: block; margin-top: 3px; color: var(--muted); font-size: 9px; }
+
+    .popover-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 13px;
+      padding-top: 10px;
+      border-top: 1px solid var(--line);
+      color: var(--faint);
+      font-size: 8px;
+    }
+
+    @media (max-width: 1180px) {
+      .concept-grid { grid-template-columns: 1fr; }
+      .concept { grid-template-columns: minmax(210px, .55fr) minmax(370px, 1fr); }
+    }
+
+    @media (max-width: 760px) {
+      .page { padding: 22px 14px 48px; }
+      h1 { font-size: 30px; }
+      .page-header { grid-template-columns: 1fr; gap: 12px; }
+      .baseline { width: fit-content; white-space: normal; }
+      .overview { grid-template-columns: 1fr; }
+      .overview-group { border-right: 0; border-bottom: 1px solid var(--line); }
+      .overview-group:last-child { border-bottom: 0; }
+      .toolbar { position: static; align-items: flex-start; flex-direction: column; }
+      .toolbar-note { display: none; }
+      .concept { grid-template-columns: 1fr; }
+      .concept-copy { border-right: 0; border-bottom: 1px solid var(--line); }
+      .impact { margin-top: 4px; }
+    }
+
+    @media (max-width: 420px) {
+      .page { padding-right: 9px; padding-left: 9px; }
+      .filter { padding-right: 8px; padding-left: 8px; }
+      .stage { padding-right: 3px; padding-left: 3px; }
+      .popover { width: calc(100% - 6px); }
+      .countdown strong { font-size: 41px; }
+      .concept h2 { font-size: 18px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="page-header">
+      <div>
+        <h1>cc-meter: the next ten product directions</h1>
+        <p class="intro">A second-wave mockup sheet focused on planning work, explaining where quota went, and helping the user recover. The default popover stays glanceable; deeper tools live in Now, Plan, and Activity views.</p>
+      </div>
+      <div class="baseline"><span class="live-dot"></span> Builds on v0.3.6: risk header, burn forecast, stale state, alerts</div>
+    </header>
+
+    <section class="overview" aria-label="Recommended rollout">
+      <div class="overview-group primary">
+        <div class="eyebrow">Best next prototypes</div>
+        <h2>Useful immediately, without widening the product</h2>
+        <p>These deepen the existing forecast and make the app meaningfully actionable.</p>
+        <div class="pick-row"><span class="pick"><b>1</b> Planner</span><span class="pick"><b>4</b> Confidence</span><span class="pick"><b>5</b> Guard</span></div>
+      </div>
+      <div class="overview-group workflow">
+        <div class="eyebrow">Planning layer</div>
+        <h2>Turn quota into usable working time</h2>
+        <p>Reserve capacity, account for real work hours, and recover at the right moment.</p>
+        <div class="pick-row"><span class="pick"><b>2</b> Reserve</span><span class="pick"><b>3</b> Work hours</span><span class="pick"><b>8</b> Recovery</span></div>
+      </div>
+      <div class="overview-group bet">
+        <div class="eyebrow">Expansion bets</div>
+        <h2>Explain usage and extend the surface</h2>
+        <p>Project estimates, model routing, terminal access, and multiple providers.</p>
+        <div class="pick-row"><span class="pick"><b>6</b> Projects</span><span class="pick"><b>10</b> Providers</span></div>
+      </div>
+    </section>
+
+    <div class="toolbar">
+      <div class="filters" role="group" aria-label="Filter concepts">
+        <button class="filter active" type="button" data-filter="all">All 10</button>
+        <button class="filter" type="button" data-filter="plan">Plan</button>
+        <button class="filter" type="button" data-filter="control">Control</button>
+        <button class="filter" type="button" data-filter="integrate">Integrate</button>
+      </div>
+      <span class="toolbar-note">Filter the sheet, then use the numbered strip to jump to a concept.</span>
+    </div>
+
+    <nav class="scan-strip" aria-label="Concept index">
+      <a class="scan-item" href="#feature-1"><strong>1</strong><span>Work-block planner</span></a>
+      <a class="scan-item" href="#feature-2"><strong>2</strong><span>Quota reserve</span></a>
+      <a class="scan-item" href="#feature-3"><strong>3</strong><span>Work-hours runway</span></a>
+      <a class="scan-item" href="#feature-4"><strong>4</strong><span>Confidence range</span></a>
+      <a class="scan-item" href="#feature-5"><strong>5</strong><span>Runaway guard</span></a>
+      <a class="scan-item" href="#feature-6"><strong>6</strong><span>Project estimate</span></a>
+      <a class="scan-item" href="#feature-7"><strong>7</strong><span>Model routing</span></a>
+      <a class="scan-item" href="#feature-8"><strong>8</strong><span>Recovery mode</span></a>
+      <a class="scan-item" href="#feature-9"><strong>9</strong><span>Terminal surface</span></a>
+      <a class="scan-item" href="#feature-10"><strong>10</strong><span>Multi-provider</span></a>
+    </nav>
+
+    <section class="concept-grid">
+      <article class="concept" id="feature-1" data-category="plan">
+        <div class="concept-copy">
+          <div>
+            <span class="number">1</span>
+            <h2>Work-block planner</h2>
+            <p>Ask whether a planned Claude session fits before starting it. Predictions use the user’s observed normal and heavy burn rates.</p>
+            <div class="meta"><span class="high">High impact</span><span>Medium effort</span><span>Plan</span></div>
+          </div>
+          <div class="impact">Best interaction: duration and intensity update the expected ending usage, risk label, and confidence instantly.</div>
+        </div>
+        <div class="stage">
+          <div class="desktop">
+            <div class="desktop-bar"><span>Wi-Fi</span><span class="menu-meter"><span class="dot"></span>48%</span><span>1:59 PM</span></div>
+            <div class="popover">
+              <div class="app-head"><span>Claude Code Usage</span><button class="mode-button" type="button">Used</button></div>
+              <div class="tabs"><span>Now</span><span class="active">Plan</span><span>Activity</span></div>
+              <div class="mock-section">
+                <div class="mock-label">Planned coding block</div>
+                <h3 class="mock-title">Can this block fit?</h3>
+                <div class="segment planner-duration" data-testid="planner-duration">
+                  <button type="button" data-minutes="60">60 min</button>
+                  <button class="active" type="button" data-minutes="90">90 min</button>
+                  <button type="button" data-minutes="120">2 hours</button>
+                </div>
+                <div class="segment planner-intensity" data-testid="planner-intensity">
+                  <button type="button" data-intensity="normal">Normal pace</button>
+                  <button class="active" type="button" data-intensity="heavy">Heavy pace</button>
+                </div>
+                <div class="result-band amber" id="planner-result">
+                  <span class="mock-label" id="planner-state">Close, but it should fit</span>
+                  <strong class="result-value" id="planner-value">Likely ends at 84%</strong>
+                  <span class="result-note" id="planner-note">About 16% remains. Weekly limits stay safe.</span>
+                </div>
+                <div class="meter-track"><span class="amber-fill" id="planner-fill" style="width:84%"></span></div>
+                <div class="ticks"><span>Now 48%</span><span id="planner-tick">After block 84%</span><span>Limit</span></div>
+                <div class="mini-stats"><div>Observed rate<strong>24% / active hr</strong></div><div>Reset<strong>3h 15m</strong></div><div><span class="confidence"><i></i><i></i><i></i> High</span><strong>18 samples</strong></div></div>
+              </div>
+              <div class="popover-foot"><span>Updated 12s ago</span><span>Settings...</span></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="concept" id="feature-2" data-category="plan">
+        <div class="concept-copy">
+          <div>
+            <span class="number">2</span>
+            <h2>Quota reserve</h2>
+            <p>Protect part of the weekly limit for a deadline. The app treats reserved quota as unavailable when judging today’s pace.</p>
+            <div class="meta"><span class="high">High impact</span><span>Medium effort</span><span>Plan</span></div>
+          </div>
+          <div class="impact">The bar distinguishes used, available, and protected capacity without adding another redundant progress indicator.</div>
+        </div>
+        <div class="stage">
+          <div class="desktop">
+            <div class="desktop-bar"><span>Wi-Fi</span><span class="menu-meter"><span class="dot"></span>48%</span><span>1:59 PM</span></div>
+            <div class="popover">
+              <div class="app-head"><span>Claude Code Usage</span><button class="mode-button" type="button">Used</button></div>
+              <div class="tabs"><span>Now</span><span class="active">Plan</span><span>Activity</span></div>
+              <div class="mock-section">
+                <div class="mock-label">Weekly plan</div>
+                <h3 class="mock-title"><span id="reserve-title">25%</span> saved for Friday</h3>
+                <p class="mock-subtitle">Protected until Friday at 9:00 AM.</p>
+                <div class="reserve-track" id="reserve-track"><span class="reserve-used"></span><span class="reserve-free"></span><span class="reserve-held">RESERVED</span></div>
+                <div class="ticks"><span>48% used</span><span id="reserve-free-label">27% usable now</span><span id="reserve-held-label">25% held</span></div>
+                <div class="range-row"><input id="reserve-slider" data-testid="reserve-slider" type="range" min="10" max="40" value="25" aria-label="Weekly quota reserve"><span class="range-value" id="reserve-value">25%</span></div>
+                <div class="soft-band">
+                  <div class="row-between"><span class="mock-label">Today’s allowance</span><strong id="reserve-allowance">27%</strong></div>
+                  <span class="result-note">Current pace leaves the protected portion untouched.</span>
+                </div>
+                <div class="mini-stats"><div>Reserve starts<strong>Today</strong></div><div>Release reserve<strong>Fri 9:00</strong></div><div>Reset<strong>3d 15h</strong></div></div>
+              </div>
+              <div class="popover-foot"><span>Plan saved locally</span><span>Clear reserve</span></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="concept" id="feature-3" data-category="plan">
+        <div class="concept-copy">
+          <div>
+            <span class="number">3</span>
+            <h2>Working-hours runway</h2>
+            <p>Translate remaining quota into active coding hours and place the likely exhaustion point on the user’s actual workweek.</p>
+            <div class="meta"><span class="high">High impact</span><span>Medium effort</span><span>Plan</span></div>
+          </div>
+          <div class="impact">This answers “how much work is left?” more honestly than projecting nonstop usage through nights and weekends.</div>
+        </div>
+        <div class="stage">
+          <div class="desktop">
+            <div class="desktop-bar"><span>Wi-Fi</span><span class="menu-meter"><span class="dot"></span>48%</span><span>1:59 PM</span></div>
+            <div class="popover">
+              <div class="app-head"><span>Claude Code Usage</span><button class="mode-button" type="button">Left</button></div>
+              <div class="tabs"><span>Now</span><span class="active">Plan</span><span>Activity</span></div>
+              <div class="mock-section">
+                <div class="mock-label">Active-time forecast</div>
+                <h3 class="mock-title">About 4h 20m of work left</h3>
+                <p class="mock-subtitle">At your normal coding pace, the weekly limit lasts until Thursday afternoon.</p>
+                <div class="week-strip">
+                  <div class="day today">MON<div class="work"></div></div>
+                  <div class="day">TUE<div class="work"></div></div>
+                  <div class="day">WED<div class="work"></div></div>
+                  <div class="day exhaust">THU<div class="work"></div></div>
+                  <div class="day">FRI<div class="work"></div></div>
+                </div>
+                <div class="result-band amber">
+                  <span class="mock-label">Likely exhaustion</span>
+                  <strong class="result-value">Thu 2:40 PM</strong>
+                  <span class="result-note">Your 9–5 schedule is included. Reset is Friday at 9:00 AM.</span>
+                </div>
+                <div class="mini-stats"><div>Normal pace<strong>11% / active hr</strong></div><div>Workday<strong>9:00–5:00</strong></div><div>Timezone<strong>Pacific</strong></div></div>
+              </div>
+              <div class="popover-foot"><span>Calendar not connected</span><span>Edit work hours</span></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="concept" id="feature-4" data-category="control">
+        <div class="concept-copy">
+          <div>
+            <span class="number">4</span>
+            <h2>Forecast confidence</h2>
+            <p>Show a credible exhaustion range, its evidence, and the amount of uncertainty instead of presenting one overly exact timestamp.</p>
+            <div class="meta"><span class="high">High impact</span><span>Low effort</span><span>Control</span></div>
+          </div>
+          <div class="impact">This is the cleanest improvement to the feature already shipped: it makes the forecast easier to trust.</div>
+        </div>
+        <div class="stage">
+          <div class="desktop">
+            <div class="desktop-bar"><span>Wi-Fi</span><span class="menu-meter"><span class="dot" style="background:var(--amber)"></span>76%</span><span>2:24 PM</span></div>
+            <div class="popover">
+              <div class="app-head"><span>Claude Code Usage</span><button class="mode-button" type="button">Used</button></div>
+              <div class="tabs"><span class="active">Now</span><span>Plan</span><span>Activity</span></div>
+              <div class="mock-section">
+                <div class="mock-label">5-hour window</div>
+                <h3 class="mock-title">Likely limit: 3:10–3:45 PM</h3>
+                <p class="mock-subtitle">The reset is later, at 4:18 PM.</p>
+                <div class="forecast-line"><span class="forecast-range"></span><span class="forecast-now"></span><span class="forecast-reset"></span></div>
+                <div class="ticks"><span>Now 2:24</span><span>Likely limit</span><span>Reset 4:18</span></div>
+                <div class="result-band amber">
+                  <div class="row-between"><span class="confidence"><i></i><i></i><i></i> High confidence</span><strong>14 samples</strong></div>
+                  <span class="result-note">Your pace has stayed between 16–20% per hour for the last 52 minutes.</span>
+                </div>
+                <div class="mini-stats"><div>Current burn<strong>18% / hr</strong></div><div>Safe burn<strong>10% / hr</strong></div><div>Range width<strong>35 min</strong></div></div>
+              </div>
+              <div class="popover-foot"><span>Updated 12s ago</span><span>Forecast details</span></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="concept" id="feature-5" data-category="control">
+        <div class="concept-copy">
+          <div>
+            <span class="number">5</span>
+            <h2>Active agents and runaway guard</h2>
+            <p>Correlate sudden burn acceleration with running Claude processes, then identify the session most likely responsible.</p>
+            <div class="meta"><span class="high">Very high impact</span><span>High effort</span><span>Control</span></div>
+          </div>
+          <div class="impact">The app moves from warning about a problem to helping stop it. Process termination should always require confirmation.</div>
+        </div>
+        <div class="stage">
+          <div class="desktop">
+            <div class="desktop-bar"><span>Wi-Fi</span><span class="menu-meter"><span class="dot" style="background:var(--red)"></span>91%</span><span>2:42 PM</span></div>
+            <div class="popover">
+              <div class="app-head"><span>Claude Code Usage</span><button class="mode-button" type="button">Used</button></div>
+              <div class="tabs"><span>Now</span><span>Plan</span><span class="active">Activity</span></div>
+              <div class="notice red">
+                <strong style="font-size:11px">Usage jumped 14% in 12 minutes</strong>
+                <span class="result-note">One session is running at 2.3x your normal burn.</span>
+              </div>
+              <div class="agent-list">
+                <div class="agent"><span class="agent-mark">CC</span><span class="agent-main"><strong>speechify-mac</strong><span>Agent session · 38m</span></span><span class="agent-state hot">High burn</span></div>
+                <div class="agent"><span class="agent-mark">CC</span><span class="agent-main"><strong>cc-meter</strong><span>Interactive · 11m</span></span><span class="agent-state">Normal</span></div>
+                <div class="agent"><span class="agent-mark">CC</span><span class="agent-main"><strong>docs</strong><span>Agent session · 4m</span></span><span class="agent-state">Normal</span></div>
+              </div>
+              <div class="recommendation"><span>Inspect speechify-mac before the limit hits.</span><button class="danger-button" type="button">Stop...</button></div>
+              <div class="popover-foot"><span>3 Claude processes</span><span>Open Activity Monitor</span></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="concept" id="feature-6" data-category="control">
+        <div class="concept-copy">
+          <div>
+            <span class="number">6</span>
+            <h2>Project attribution</h2>
+            <p>Estimate quota consumption by repository using account-level usage deltas and the Claude process active during each interval.</p>
+            <div class="meta"><span>Medium impact</span><span>High effort</span><span>Control</span></div>
+          </div>
+          <div class="impact">This can be useful, but it must say “estimated” because Anthropic does not expose exact project-level usage.</div>
+        </div>
+        <div class="stage">
+          <div class="desktop">
+            <div class="desktop-bar"><span>Wi-Fi</span><span class="menu-meter"><span class="dot"></span>48%</span><span>2:08 PM</span></div>
+            <div class="popover">
+              <div class="app-head"><span>Claude Code Usage</span><button class="mode-button" type="button">Used</button></div>
+              <div class="tabs"><span>Now</span><span>Plan</span><span class="active">Activity</span></div>
+              <div class="mock-section">
+                <div class="mock-label">Last seven days</div>
+                <h3 class="mock-title">Estimated usage by project</h3>
+                <div class="project-list">
+                  <div class="project-row"><strong>speechify-mac</strong><div class="bar"><span style="width:46%"></span></div><em>46%</em></div>
+                  <div class="project-row"><strong>cc-meter</strong><div class="bar"><span style="width:21%;background:var(--blue)"></span></div><em>21%</em></div>
+                  <div class="project-row"><strong>docs</strong><div class="bar"><span style="width:12%;background:var(--amber)"></span></div><em>12%</em></div>
+                  <div class="project-row"><strong>Unattributed</strong><div class="bar"><span style="width:21%;background:#8d97a3"></span></div><em>21%</em></div>
+                </div>
+                <span class="estimate">Estimated from active process windows · 79% coverage</span>
+                <div class="mini-stats"><div>Tracked sessions<strong>31</strong></div><div>Top project<strong>speechify-mac</strong></div><div>Peak day<strong>Tuesday</strong></div></div>
+              </div>
+              <div class="popover-foot"><span>Local data only</span><span>Export CSV</span></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="concept" id="feature-7" data-category="control">
+        <div class="concept-copy">
+          <div>
+            <span class="number">7</span>
+            <h2>Quota-aware model routing</h2>
+            <p>Rank models by available capacity whenever one model-specific limit becomes the bottleneck.</p>
+            <div class="meta"><span class="high">High impact</span><span>Medium effort</span><span>Control</span></div>
+          </div>
+          <div class="impact">The recommendation is explicitly about quota headroom, not model quality or suitability for the task.</div>
+        </div>
+        <div class="stage">
+          <div class="desktop">
+            <div class="desktop-bar"><span>Wi-Fi</span><span class="menu-meter"><span class="dot" style="background:var(--amber)"></span>57%</span><span>3:11 PM</span></div>
+            <div class="popover">
+              <div class="app-head"><span>Claude Code Usage</span><button class="mode-button" type="button">Left</button></div>
+              <div class="tabs"><span class="active">Now</span><span>Plan</span><span>Activity</span></div>
+              <div class="mock-section">
+                <div class="mock-label">Model headroom</div>
+                <h3 class="mock-title">Best runway: Sonnet</h3>
+                <p class="mock-subtitle">Fable is the current model-specific bottleneck.</p>
+                <div class="model-list">
+                  <div class="model-row"><span class="model-main"><strong>Sonnet</strong><span>Safest capacity</span></span><div class="model-meter"><span style="width:68%"></span></div><span class="model-left">68% left</span></div>
+                  <div class="model-row"><span class="model-main"><strong>Opus</strong><span>Weekly limit</span></span><div class="model-meter amber"><span style="width:22%"></span></div><span class="model-left">22% left</span></div>
+                  <div class="model-row"><span class="model-main"><strong>Fable</strong><span>Current model</span></span><div class="model-meter red"><span style="width:9%"></span></div><span class="model-left">9% left</span></div>
+                </div>
+                <div class="recommendation"><span>Switching preserves Fable for later.</span><button class="primary-button" type="button">Copy command</button></div>
+                <div class="mini-stats"><div>All models<strong>43% left</strong></div><div>Next reset<strong>3d 8h</strong></div><div>Basis<strong>Quota only</strong></div></div>
+              </div>
+              <div class="popover-foot"><span>No model changed automatically</span><span>Settings...</span></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="concept" id="feature-8" data-category="plan">
+        <div class="concept-copy">
+          <div>
+            <span class="number">8</span>
+            <h2>Recovery mode</h2>
+            <p>When a limit is exhausted, replace the normal dashboard with the one answer that matters: when work can resume.</p>
+            <div class="meta"><span>Medium impact</span><span>Low effort</span><span>Plan</span></div>
+          </div>
+          <div class="impact">A focused state is calmer and more useful than leaving several depleted meters on screen.</div>
+        </div>
+        <div class="stage">
+          <div class="desktop">
+            <div class="desktop-bar"><span>Wi-Fi</span><span class="menu-meter"><span class="dot" style="background:var(--red)"></span>100%</span><span>2:40 PM</span></div>
+            <div class="popover">
+              <div class="app-head"><span>Claude Code Usage</span><button class="mode-button" type="button">Used</button></div>
+              <div class="tabs"><span class="active">Now</span><span>Plan</span><span>Activity</span></div>
+              <div class="countdown">
+                <span class="mock-label">5-hour window resets in</span>
+                <strong>38:24</strong>
+                <span>Usage returns at 3:18 PM.</span>
+              </div>
+              <div class="recovery-actions">
+                <button class="primary-button" id="notify-ready" data-testid="notify-ready" type="button">Notify when ready</button>
+                <button class="small-button" type="button">Add reminder</button>
+              </div>
+              <div class="next-block">Next safe heavy block<br><strong>3:25–5:05 PM</strong></div>
+              <div class="result-band green"><span class="mock-label">Weekly window</span><strong style="display:block;margin-top:3px;font-size:12px">Still healthy · 48% used</strong></div>
+              <div class="popover-foot"><span>Updated 9s ago</span><span>Quit</span></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="concept" id="feature-9" data-category="integrate">
+        <div class="concept-copy">
+          <div>
+            <span class="number">9</span>
+            <h2>Terminal and automation surface</h2>
+            <p>Expose compact, human-readable, and JSON status commands for prompts, scripts, Raycast, and personal automations.</p>
+            <div class="meta"><span class="high">High impact</span><span>Low effort</span><span>Integrate</span></div>
+          </div>
+          <div class="impact">This turns the existing core library into a reusable local tool without adding weight to the menu-bar view.</div>
+        </div>
+        <div class="stage">
+          <div class="desktop">
+            <div class="desktop-bar"><span>Wi-Fi</span><span class="menu-meter"><span class="dot" style="background:var(--amber)"></span>76%</span><span>2:24 PM</span></div>
+            <div class="popover">
+              <div class="app-head"><span>cc-meter integrations</span><button class="mode-button" type="button">Done</button></div>
+              <div class="mock-section">
+                <div class="mock-label">Live command preview</div>
+                <div class="terminal"><span class="prompt">$</span> cc-meter status --compact<br><span class="warn">5h 76%</span> · limit 42m · reset 1h18m<br>7d 48% · safe through reset<br><br><span class="prompt">$</span> cc-meter status --json</div>
+                <div class="integration-list">
+                  <div class="integration"><span class="integration-main"><strong>Shell prompt</strong><span>Show the tightest limit</span></span><span class="switch"></span></div>
+                  <div class="integration"><span class="integration-main"><strong>JSON output</strong><span>For scripts and local tools</span></span><button class="small-button" type="button">Copy</button></div>
+                  <div class="integration"><span class="integration-main"><strong>Raycast command</strong><span>Open the current runway</span></span><button class="small-button" type="button">Install</button></div>
+                </div>
+                <div class="soft-band"><span class="mock-label">Automation example</span><span class="result-note">Pause a new agent launch when the 5-hour window has less than 15% remaining.</span></div>
+              </div>
+              <div class="popover-foot"><span>Local access only</span><span>CLI documentation</span></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="concept" id="feature-10" data-category="integrate">
+        <div class="concept-copy">
+          <div>
+            <span class="number">10</span>
+            <h2>Multi-provider runway</h2>
+            <p>Track coding-assistant capacity together and highlight which provider currently has the safest runway.</p>
+            <div class="meta"><span class="bet">Big product bet</span><span>Very high effort</span><span>Integrate</span></div>
+          </div>
+          <div class="impact">This likely grows beyond “cc-meter,” but it creates a stronger daily utility for people who already switch between tools.</div>
+        </div>
+        <div class="stage">
+          <div class="desktop">
+            <div class="desktop-bar"><span>Wi-Fi</span><span class="menu-meter"><span class="dot"></span>AI 71%</span><span>3:05 PM</span></div>
+            <div class="popover">
+              <div class="app-head"><span>AI Coding Runway</span><button class="mode-button" type="button">Left</button></div>
+              <div class="tabs"><span class="active">Now</span><span>Plan</span><span>Activity</span></div>
+              <div class="mock-section">
+                <div class="mock-label">Available capacity</div>
+                <h3 class="mock-title">Three providers ready</h3>
+                <div class="provider-list">
+                  <div class="provider"><span class="provider-mark">CL</span><span class="provider-main"><strong>Claude Code</strong><span>5-hour window · limit in 42m</span></span><span class="provider-runway tight">24% left</span></div>
+                  <div class="provider"><span class="provider-mark codex">CX</span><span class="provider-main"><strong>Codex</strong><span>Weekly window · safe pace</span></span><span class="provider-runway safe">71% left</span></div>
+                  <div class="provider"><span class="provider-mark gemini">GM</span><span class="provider-main"><strong>Gemini</strong><span>Daily window · resets tonight</span></span><span class="provider-runway safe">88% left</span></div>
+                </div>
+                <div class="best-provider"><strong>Best capacity right now: Gemini</strong><span>Codex is also comfortably within its weekly pace.</span></div>
+                <div class="mini-stats"><div>Connected<strong>3 providers</strong></div><div>Tightest<strong>Claude 5h</strong></div><div>Freshness<strong>All current</strong></div></div>
+              </div>
+              <div class="popover-foot"><span>Updated 14s ago</span><span>Manage providers</span></div>
+            </div>
+          </div>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    const filterButtons = [...document.querySelectorAll('.filter')];
+    const concepts = [...document.querySelectorAll('.concept')];
+
+    filterButtons.forEach((button) => {
+      button.addEventListener('click', () => {
+        const filter = button.dataset.filter;
+        filterButtons.forEach((item) => item.classList.toggle('active', item === button));
+        concepts.forEach((concept) => {
+          concept.hidden = filter !== 'all' && concept.dataset.category !== filter;
+        });
+      });
+    });
+
+    const plannerData = {
+      'normal-60': [60, 'Comfortably fits', 'Likely ends at 60%', 'About 40% remains. Weekly limits stay safe.', 'green'],
+      'normal-90': [66, 'Comfortably fits', 'Likely ends at 66%', 'About 34% remains. Weekly limits stay safe.', 'green'],
+      'normal-120': [72, 'Comfortably fits', 'Likely ends at 72%', 'About 28% remains. Weekly limits stay safe.', 'green'],
+      'heavy-60': [72, 'Fits at current pace', 'Likely ends at 72%', 'About 28% remains. Weekly limits stay safe.', 'green'],
+      'heavy-90': [84, 'Close, but it should fit', 'Likely ends at 84%', 'About 16% remains. Weekly limits stay safe.', 'amber'],
+      'heavy-120': [101, 'Likely to run out', 'Projected past the limit', 'The 5-hour limit may arrive about 8 minutes early.', 'red']
+    };
+
+    let plannerMinutes = '90';
+    let plannerIntensity = 'heavy';
+
+    function renderPlanner() {
+      const data = plannerData[`${plannerIntensity}-${plannerMinutes}`];
+      const [percent, state, value, note, tone] = data;
+      const result = document.getElementById('planner-result');
+      result.className = `result-band ${tone}`;
+      document.getElementById('planner-state').textContent = state;
+      document.getElementById('planner-value').textContent = value;
+      document.getElementById('planner-note').textContent = note;
+      document.getElementById('planner-fill').style.width = `${Math.min(100, percent)}%`;
+      document.getElementById('planner-fill').className = tone === 'red' ? 'red-fill' : tone === 'amber' ? 'amber-fill' : '';
+      document.getElementById('planner-tick').textContent = percent > 100 ? 'Exhausts early' : `After block ${percent}%`;
+    }
+
+    document.querySelectorAll('.planner-duration button').forEach((button) => {
+      button.addEventListener('click', () => {
+        plannerMinutes = button.dataset.minutes;
+        document.querySelectorAll('.planner-duration button').forEach((item) => item.classList.toggle('active', item === button));
+        renderPlanner();
+      });
+    });
+
+    document.querySelectorAll('.planner-intensity button').forEach((button) => {
+      button.addEventListener('click', () => {
+        plannerIntensity = button.dataset.intensity;
+        document.querySelectorAll('.planner-intensity button').forEach((item) => item.classList.toggle('active', item === button));
+        renderPlanner();
+      });
+    });
+
+    const reserveSlider = document.getElementById('reserve-slider');
+    reserveSlider.addEventListener('input', () => {
+      const held = Number(reserveSlider.value);
+      const free = 52 - held;
+      document.getElementById('reserve-title').textContent = `${held}%`;
+      document.getElementById('reserve-value').textContent = `${held}%`;
+      document.getElementById('reserve-free-label').textContent = `${free}% usable now`;
+      document.getElementById('reserve-held-label').textContent = `${held}% held`;
+      document.getElementById('reserve-allowance').textContent = `${free}%`;
+      document.getElementById('reserve-track').style.gridTemplateColumns = `48fr ${free}fr ${held}fr`;
+    });
+
+    document.getElementById('notify-ready').addEventListener('click', (event) => {
+      const button = event.currentTarget;
+      button.textContent = button.dataset.enabled === 'true' ? 'Notify when ready' : 'Alert set for 3:18';
+      button.dataset.enabled = button.dataset.enabled === 'true' ? 'false' : 'true';
+    });
+  </script>
+</body>
+</html>
