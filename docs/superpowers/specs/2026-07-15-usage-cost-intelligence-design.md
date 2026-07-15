@@ -50,7 +50,7 @@ Inspired by `steipete/codexbar` (which does local cost scans and ships `codexbar
   - `timestamp`: top-level ISO-8601 UTC on each record.
 
 ### 3.3 Worktree normalization (both providers)
-Worktree checkouts appear as separate projects: Claude `...--claude-worktrees-<name>` dirs and Codex `~/.codex/worktrees/<hash>/<project>` cwds. v1 groups by the **cwd leaf directory name** for display and applies a light normalization pass that maps known worktree path patterns back to the parent project name. If normalization is ambiguous, the raw leaf name is shown (worktrees may appear as siblings). Full worktree→parent mapping is a documented v1 simplification, refinable later.
+Worktree checkouts would appear as separate projects: Claude worktrees have cwd `<project>/.claude/worktrees/<branch>` and Codex worktrees have cwd `~/.codex/worktrees/<hash>/<project>`. v1 normalizes the Claude case back to `<project>` (the component before `.claude`); Codex worktrees already end in the project name, so the cwd leaf is correct there. If normalization is ambiguous, the raw leaf name is shown (worktrees may appear as siblings). Full worktree→parent mapping is a documented v1 simplification, refinable later.
 
 ## 4. Architecture
 

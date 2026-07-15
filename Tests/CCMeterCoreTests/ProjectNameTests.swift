@@ -11,8 +11,9 @@ final class ProjectNameTests: XCTestCase {
     }
 
     func testClaudeWorktreeMapsToParentProject() {
+        // Real Claude worktree layout is "<project>/.claude/worktrees/<branch>".
         XCTAssertEqual(
-            ProjectName.from(cwd: "/Users/x/MacApp/mac-speechify-ai-assistant/.claude-worktrees/dictation"),
+            ProjectName.from(cwd: "/Users/x/MacApp/mac-speechify-ai-assistant/.claude/worktrees/dictation-privacy-mode"),
             "mac-speechify-ai-assistant")
     }
 
