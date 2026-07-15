@@ -645,12 +645,14 @@ public final class StatusMonitor: ObservableObject {
         }
         let monitor = StatusMonitor(client: FakeClient(), interval: 300)
         await monitor.refresh()
-        let dashboard = DashboardViewModel(claude: makeMeter(.claude), codex: makeMeter(.codex), statusMonitor: monitor)
+        // Mirror this file's existing meter construction (DashboardStubClient + usage(_:) helpers).
+        let claudeMeter = MeterViewModel(provider: .claude, client: DashboardStubClient(.success(usage(20))), now: { self.now })
+        let codexMeter = MeterViewModel(provider: .codex, client: DashboardStubClient(.success(usage(20))), now: { self.now })
+        let dashboard = DashboardViewModel(claude: claudeMeter, codex: codexMeter, statusMonitor: monitor)
         XCTAssertEqual(dashboard.statusLevels[.claude], .degraded)
         XCTAssertEqual(dashboard.providerStatuses[.claude]?.headline, "x")
     }
 ```
-Note: `makeMeter(_:)` - reuse whatever helper the existing `DashboardViewModelTests` already uses to build a `MeterViewModel` (read the file; if it constructs meters inline, mirror that). If no helper exists, build a `MeterViewModel(provider:client:)` with the file's existing fake usage client.
 
 - [ ] **Step 2: Run** `swift test --filter DashboardViewModelTests 2>&1 | tail -20` - expect FAIL.
 - [ ] **Step 3: Implement** - add to `DashboardViewModel`:
@@ -688,8 +690,11 @@ Note: `makeMeter(_:)` - reuse whatever helper the existing `DashboardViewModelTe
 and add these members to `PopoverView`:
 ```swift
     private var statusBanners: [ProviderStatus] {
-        [UsageProvider.claude, .codex].compactMap { dashboard.providerStatuses[$0] }
-            .filter { $0.level != .ok }
+        // Gate Codex on visibility: the monitor polls OpenAI's status unauthenticated, so a
+        // signed-out Codex user must not see a banner for a provider whose block is hidden.
+        var providers: [UsageProvider] = [.claude]
+        if dashboard.showsCodex { providers.append(.codex) }
+        return providers.compactMap { dashboard.providerStatuses[$0] }.filter { $0.level != .ok }
     }
 
     @ViewBuilder private func statusBanner(_ status: ProviderStatus) -> some View {
