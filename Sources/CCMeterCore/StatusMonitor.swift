@@ -42,4 +42,6 @@ public final class StatusMonitor: ObservableObject {
 
     public func status(for provider: UsageProvider) -> ProviderStatus? { statuses[provider] }
     public func level(for provider: UsageProvider) -> StatusLevel { statuses[provider]?.level ?? .ok }
+
+    deinit { timer?.invalidate() }
 }
