@@ -9,10 +9,13 @@ final class MenuBarController {
     private let popover = NSPopover()
     private let dashboard: DashboardViewModel
     private let onOpenSettings: () -> Void
+    private let usageModel: UsageDetailViewModel?
     private var cancellables = Set<AnyCancellable>()
 
-    init(dashboard: DashboardViewModel, onOpenSettings: @escaping () -> Void = {}) {
+    init(dashboard: DashboardViewModel, usageModel: UsageDetailViewModel? = nil,
+         onOpenSettings: @escaping () -> Void = {}) {
         self.dashboard = dashboard
+        self.usageModel = usageModel
         self.onOpenSettings = onOpenSettings
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     }
@@ -23,7 +26,7 @@ final class MenuBarController {
             button.action = #selector(togglePopover)
         }
         popover.behavior = .transient
-        let root = PopoverView(dashboard: dashboard, onOpenSettings: { [weak self] in
+        let root = PopoverView(dashboard: dashboard, usageModel: usageModel, onOpenSettings: { [weak self] in
             self?.popover.performClose(nil)
             self?.onOpenSettings()
         })

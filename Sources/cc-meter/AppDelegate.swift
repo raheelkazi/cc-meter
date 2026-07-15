@@ -9,6 +9,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let preferencesStore = UserDefaultsPreferencesStore()
     private var dashboard: DashboardViewModel?
     private var autoUpdateController: AutomaticUpdateControlling?
+    private var usageModel: UsageDetailViewModel?
+    private var usageIndexer: UsageIndexer?
+    private var usageIndexTimer: Timer?
 
     static func makeAutoUpdateController(environment: [String: String]) -> AutoUpdateController {
         let updater = HomebrewUpdater(
@@ -24,6 +27,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             attemptStore: UserDefaultsUpdateAttemptStore(),
             exitHandler: { Darwin.exit($0) }
         )
+    }
+
+    /// Live reset time for a provider's window, read from its meter, so the Usage tab's window
+    /// lines up with the Limits tab. 5h -> the session window; 7d -> the first weekly window.
+    static func resetsAt(_ dashboard: DashboardViewModel,
+                         provider: UsageProvider, window: UsageWindow) -> Date? {
+        let meter = provider == .claude ? dashboard.claude : dashboard.codex
+        guard case .ok(let usage) = meter.state else { return nil }
+        switch window {
+        case .fiveHour:
+            return usage.limits.first(where: { $0.kind.isSessionWindow })?.resetsAt
+        case .sevenDay:
+            return usage.limits.first(where: { !$0.kind.isSessionWindow })?.resetsAt
+        }
     }
 
     static func startAutomaticUpdates(
@@ -94,6 +111,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let dashboard = DashboardViewModel(claude: claudeMeter, codex: codexMeter)
         self.dashboard = dashboard
 
+        var usageModel: UsageDetailViewModel?
+        if preferences.usageBreakdownEnabled {
+            let claudeDir = UsageIndexer.defaultClaudeProjectsDir()
+            let codexDir = UsageIndexer.defaultCodexSessionsDir()
+            let eventStore = FileUsageEventStore(url: FileUsageEventStore.defaultURL())
+            let indexer = UsageIndexer(
+                fileSystem: SystemFileSystem(),
+                store: eventStore,
+                cursors: FileCursorStore(url: FileCursorStore.defaultURL()),
+                claudeProjectsDir: claudeDir,
+                codexSessionsDir: codexDir)
+            self.usageIndexer = indexer
+
+            let model = UsageDetailViewModel(
+                store: eventStore,
+                resetsAt: { [weak dashboard] provider, window in
+                    guard let dashboard else { return nil }
+                    return Self.resetsAt(dashboard, provider: provider, window: window)
+                },
+                indexerTick: { indexer.tick() },   // synchronous; the view-model runs it off-main
+                logsPresent: { provider in
+                    FileManager.default.fileExists(atPath: provider == .claude ? claudeDir : codexDir)
+                })
+            usageModel = model
+            self.usageModel = model
+
+            // First index build (off-main; flips hasIndexed when done) + periodic refresh.
+            // refreshInBackground never blocks the main thread (the #16 lesson).
+            model.refreshInBackground()
+            let timer = Timer.scheduledTimer(withTimeInterval: preferences.pollInterval, repeats: true) { _ in
+                Task { @MainActor in model.refreshInBackground() }
+            }
+            self.usageIndexTimer = timer
+        }
+
         // Built before the settings window: Settings shows the updater's status and can
         // trigger a check, so it needs the controller to observe.
         let autoUpdateController = Self.makeAutoUpdateController(
@@ -107,7 +159,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             updates: autoUpdateController
         )
 
-        let controller = MenuBarController(dashboard: dashboard) { [weak self] in
+        let controller = MenuBarController(dashboard: dashboard, usageModel: usageModel) { [weak self] in
             self?.settingsWindow?.show()
         }
         controller.install()

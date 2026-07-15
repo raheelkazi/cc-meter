@@ -19,6 +19,8 @@ public struct Preferences: Codable, Equatable {
     public var launchAtLogin: Bool
     /// Whether Homebrew service installations should update automatically.
     public var automaticUpdatesEnabled: Bool
+    /// Whether the Usage tab parses local Claude/Codex logs for the token breakdown.
+    public var usageBreakdownEnabled: Bool
 
     public static let minPollInterval: TimeInterval = 15
 
@@ -31,7 +33,8 @@ public struct Preferences: Codable, Equatable {
                 defaultShowRemaining: Bool = false,
                 historyEnabled: Bool = true,
                 launchAtLogin: Bool = false,
-                automaticUpdatesEnabled: Bool = true) {
+                automaticUpdatesEnabled: Bool = true,
+                usageBreakdownEnabled: Bool = true) {
         self.pollInterval = pollInterval
         self.notificationsEnabled = notificationsEnabled
         self.notificationThresholds = notificationThresholds
@@ -40,12 +43,13 @@ public struct Preferences: Codable, Equatable {
         self.historyEnabled = historyEnabled
         self.launchAtLogin = launchAtLogin
         self.automaticUpdatesEnabled = automaticUpdatesEnabled
+        self.usageBreakdownEnabled = usageBreakdownEnabled
     }
 
     private enum CodingKeys: String, CodingKey {
         case pollInterval, notificationsEnabled, notificationThresholds
         case sessionResetHeadsUpMinutes, defaultShowRemaining, historyEnabled, launchAtLogin
-        case automaticUpdatesEnabled
+        case automaticUpdatesEnabled, usageBreakdownEnabled
     }
 
     /// Decodes leniently: any field absent from an older stored blob falls back
@@ -64,6 +68,8 @@ public struct Preferences: Codable, Equatable {
             Bool.self,
             forKey: .automaticUpdatesEnabled
         ) ?? d.automaticUpdatesEnabled
+        usageBreakdownEnabled = try c.decodeIfPresent(
+            Bool.self, forKey: .usageBreakdownEnabled) ?? d.usageBreakdownEnabled
     }
 
     /// Returns a copy with out-of-range values coerced back into supported bounds.

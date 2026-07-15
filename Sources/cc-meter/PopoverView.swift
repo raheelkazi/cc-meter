@@ -9,7 +9,11 @@ import CCMeterCore
 /// critical (`dashboard.alert`), which costs nothing in the state you are usually in.
 struct PopoverView: View {
     @ObservedObject var dashboard: DashboardViewModel
+    var usageModel: UsageDetailViewModel? = nil
     var onOpenSettings: () -> Void = {}
+
+    @State private var tab: Tab = .limits
+    private enum Tab { case limits, usage }
 
     private enum Metrics {
         static let barWidth: CGFloat = 64
@@ -24,24 +28,21 @@ struct PopoverView: View {
         VStack(alignment: .leading, spacing: 10) {
             header
 
-            if let alert = dashboard.alert {
-                alertView(alert)
-            }
-
-            ScrollView(.vertical) {
-                VStack(alignment: .leading, spacing: 0) {
-                    providerBlock(provider: .claude, viewModel: dashboard.claude)
-                    if dashboard.showsCodex {
-                        providerBlock(provider: .codex, viewModel: dashboard.codex)
+            if tab == .usage, let usageModel {
+                UsageTabView(model: usageModel, showsCodex: dashboard.showsCodex)
+            } else {
+                if let alert = dashboard.alert { alertView(alert) }
+                ScrollView(.vertical) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        providerBlock(provider: .claude, viewModel: dashboard.claude)
+                        if dashboard.showsCodex {
+                            providerBlock(provider: .codex, viewModel: dashboard.codex)
+                        }
                     }
                 }
+                .frame(maxHeight: Metrics.maxListHeight)
+                .fixedSize(horizontal: false, vertical: true)
             }
-            // A ScrollView is greedy along its scroll axis: given a 420pt ceiling it takes
-            // all 420, which left a long gap under a short list. fixedSize pins it to its
-            // content's height instead, and the ceiling only bites once the list is genuinely
-            // taller than the cap — at which point it scrolls.
-            .frame(maxHeight: Metrics.maxListHeight)
-            .fixedSize(horizontal: false, vertical: true)
 
             footer
         }
@@ -51,18 +52,23 @@ struct PopoverView: View {
 
     private var header: some View {
         HStack {
-            Text("Usage").font(.headline)
-            Spacer()
-            // A segmented control, not a bare word: as a plain label this toggle read as a
-            // column header, which is why nobody could find it.
-            Picker("", selection: modeBinding) {
-                Text("Used").tag(DisplayMode.used)
-                Text("Left").tag(DisplayMode.remaining)
+            if usageModel != nil {
+                Picker("", selection: $tab) {
+                    Text("Limits").tag(Tab.limits)
+                    Text("Usage").tag(Tab.usage)
+                }
+                .pickerStyle(.segmented).labelsHidden().fixedSize()
+            } else {
+                Text("Usage").font(.headline)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
-            .help("Show used or remaining")
+            Spacer()
+            if tab == .limits {
+                Picker("", selection: modeBinding) {
+                    Text("Used").tag(DisplayMode.used)
+                    Text("Left").tag(DisplayMode.remaining)
+                }
+                .pickerStyle(.segmented).labelsHidden().fixedSize().help("Show used or remaining")
+            }
         }
     }
 

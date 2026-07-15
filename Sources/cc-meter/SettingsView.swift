@@ -84,6 +84,8 @@ struct SettingsView: View {
                            isOn: $prefs.defaultShowRemaining)
                     Toggle("Record usage history (burn forecasts)",
                            isOn: $prefs.historyEnabled)
+                    Toggle("Show usage & cost breakdown (reads local logs)",
+                           isOn: $prefs.usageBreakdownEnabled)
                 }
 
                 card("Updates") {
