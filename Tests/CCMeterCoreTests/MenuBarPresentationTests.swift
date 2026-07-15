@@ -47,4 +47,22 @@ final class MenuBarPresentationTests: XCTestCase {
         XCTAssertEqual(MenuBarPresentation.make(summaries: [], isLoading: false,
                                                 hasError: false).plainTitle, "CC")
     }
+
+    func testDegradedProviderShowsWarningGlyph() {
+        let summaries = [ProviderCompactSummary(provider: .claude, percent: 42, color: .green),
+                         ProviderCompactSummary(provider: .codex, percent: 30, color: .green)]
+        let p = MenuBarPresentation.make(summaries: summaries, isLoading: false, hasError: false,
+                                         statuses: [.claude: .major])
+        XCTAssertTrue(p.segments.contains { $0.text == "⚠" && $0.color == .red },
+                      "a degraded provider shows a colored warning glyph")
+        XCTAssertFalse(p.plainTitle.contains("●⚠"))
+        XCTAssertTrue(p.plainTitle.contains("42%"))
+    }
+
+    func testNoStatusesKeepsDots() {
+        let summaries = [ProviderCompactSummary(provider: .claude, percent: 42, color: .green)]
+        let p = MenuBarPresentation.make(summaries: summaries, isLoading: false, hasError: false)
+        XCTAssertTrue(p.segments.contains { $0.text.contains("●") })
+        XCTAssertFalse(p.segments.contains { $0.text == "⚠" })
+    }
 }

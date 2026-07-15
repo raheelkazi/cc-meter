@@ -39,11 +39,13 @@ public final class DashboardViewModel: ObservableObject {
     public let codex: MeterViewModel
     @Published public private(set) var showsCodex = false
 
+    private let statusMonitor: StatusMonitor?
     private var cancellables = Set<AnyCancellable>()
 
-    public init(claude: MeterViewModel, codex: MeterViewModel) {
+    public init(claude: MeterViewModel, codex: MeterViewModel, statusMonitor: StatusMonitor? = nil) {
         self.claude = claude
         self.codex = codex
+        self.statusMonitor = statusMonitor
 
         claude.objectWillChange
             .sink { [weak self] in self?.objectWillChange.send() }
@@ -54,6 +56,17 @@ public final class DashboardViewModel: ObservableObject {
         codex.$state
             .sink { [weak self] state in self?.reconcileCodexVisibility(state) }
             .store(in: &cancellables)
+        statusMonitor?.objectWillChange
+            .sink { [weak self] in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+    }
+
+    public var statusLevels: [UsageProvider: StatusLevel] {
+        statusMonitor?.statuses.mapValues(\.level) ?? [:]
+    }
+
+    public var providerStatuses: [UsageProvider: ProviderStatus] {
+        statusMonitor?.statuses ?? [:]
     }
 
     public var displayMode: DisplayMode { claude.displayMode }

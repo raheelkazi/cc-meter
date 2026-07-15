@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var usageModel: UsageDetailViewModel?
     private var usageIndexer: UsageIndexer?
     private var usageIndexTimer: Timer?
+    private var statusMonitor: StatusMonitor?
 
     static func makeAutoUpdateController(environment: [String: String]) -> AutoUpdateController {
         let updater = HomebrewUpdater(
@@ -108,7 +109,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             notifier: ThresholdNotifier(),
             notificationSink: OsascriptNotifier()
         )
-        let dashboard = DashboardViewModel(claude: claudeMeter, codex: codexMeter)
+        let statusMonitor = StatusMonitor(client: HTTPStatusClient(transport: URLSessionTransport(session: .shared)))
+        self.statusMonitor = statusMonitor
+
+        let dashboard = DashboardViewModel(claude: claudeMeter, codex: codexMeter, statusMonitor: statusMonitor)
         self.dashboard = dashboard
 
         var usageModel: UsageDetailViewModel?
@@ -168,6 +172,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Self.startAutomaticUpdates(autoUpdateController, preferences: preferences)
 
         dashboard.start()
+        statusMonitor.start()
         DebugLog.log("didFinishLaunching complete; entering run loop")
     }
 

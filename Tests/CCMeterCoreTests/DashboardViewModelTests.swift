@@ -214,4 +214,20 @@ final class DashboardViewModelTests: XCTestCase {
         XCTAssertNil(dashboard.alert)
     }
 
+    func testForwardsStatusLevelsFromMonitor() async {
+        final class FakeClient: StatusFetching {
+            func fetch(_ provider: UsageProvider) async -> ProviderStatus? {
+                provider == .claude ? ProviderStatus(provider: .claude, level: .degraded, headline: "x") : nil
+            }
+        }
+        let monitor = StatusMonitor(client: FakeClient(), interval: 300)
+        await monitor.refresh()
+        // Mirror this file's existing meter construction (DashboardStubClient + usage(_:) helpers).
+        let claudeMeter = MeterViewModel(provider: .claude, client: DashboardStubClient(.success(usage(20))), now: { self.now })
+        let codexMeter = MeterViewModel(provider: .codex, client: DashboardStubClient(.success(usage(20))), now: { self.now })
+        let dashboard = DashboardViewModel(claude: claudeMeter, codex: codexMeter, statusMonitor: monitor)
+        XCTAssertEqual(dashboard.statusLevels[.claude], .degraded)
+        XCTAssertEqual(dashboard.providerStatuses[.claude]?.headline, "x")
+    }
+
 }
