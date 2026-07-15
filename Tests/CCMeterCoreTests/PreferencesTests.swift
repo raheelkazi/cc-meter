@@ -71,4 +71,21 @@ final class PreferencesTests: XCTestCase {
         let store = UserDefaultsPreferencesStore(defaults: defaults, key: "absent")
         XCTAssertEqual(store.load(), Preferences())
     }
+
+    func testUsageBreakdownEnabledDefaultsTrue() {
+        XCTAssertTrue(Preferences().usageBreakdownEnabled)
+    }
+
+    func testUsageBreakdownEnabledAbsentDecodesToDefault() throws {
+        let json = "{\"pollInterval\":180}".data(using: .utf8)!
+        let prefs = try JSONDecoder().decode(Preferences.self, from: json)
+        XCTAssertTrue(prefs.usageBreakdownEnabled)
+    }
+
+    func testUsageBreakdownEnabledRoundTrips() throws {
+        var prefs = Preferences()
+        prefs.usageBreakdownEnabled = false
+        let data = try JSONEncoder().encode(prefs)
+        XCTAssertFalse(try JSONDecoder().decode(Preferences.self, from: data).usageBreakdownEnabled)
+    }
 }
