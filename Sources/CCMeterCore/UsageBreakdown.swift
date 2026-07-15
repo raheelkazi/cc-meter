@@ -53,11 +53,14 @@ public enum UsageBreakdownBuilder {
         var modelTokens: [String: Int] = [:]
         var cost = 0.0
         var anyPriced = false
+        var anyUnpriced = false
         for e in inWindow {
             projectTokens[e.project, default: 0] += e.tokens.total
             modelTokens[e.model, default: 0] += e.tokens.total
             if let c = ModelPriceTable.notionalCost(e.tokens, model: e.model) {
                 cost += c; anyPriced = true
+            } else {
+                anyUnpriced = true
             }
         }
 
@@ -77,7 +80,7 @@ public enum UsageBreakdownBuilder {
         let buckets = bucketTokens.enumerated().map { UsageBucket(index: $0.offset, tokens: $0.element) }
 
         return UsageBreakdown(provider: provider, window: window, totalTokens: total,
-                              notionalCost: anyPriced ? cost : nil,
+                              notionalCost: (anyPriced && !anyUnpriced) ? cost : nil,
                               projects: projects, models: models, buckets: buckets)
     }
 }

@@ -13,6 +13,7 @@ public final class UsageDetailViewModel: ObservableObject {
     @Published public private(set) var breakdown: UsageBreakdown?
     /// False until the first index pass finishes, so the tab can show a progress state on first launch.
     @Published public private(set) var hasIndexed = false
+    @Published public private(set) var currentLogsPresent = true
 
     private let store: UsageEventStoring
     private let resetsAt: (UsageProvider, UsageWindow) -> Date?
@@ -36,8 +37,6 @@ public final class UsageDetailViewModel: ObservableObject {
         recompute()
     }
 
-    public func logsPresent(_ provider: UsageProvider) -> Bool { logsPresentFor(provider) }
-
     public func recompute() {
         let clock = now()
         let start = resetsAt(provider, window).map { $0.addingTimeInterval(-window.length) }
@@ -45,6 +44,7 @@ public final class UsageDetailViewModel: ObservableObject {
         let events = store.events(since: start)
         breakdown = UsageBreakdownBuilder.build(events: events, provider: provider,
                                                 window: window, windowStart: start, now: clock)
+        currentLogsPresent = logsPresentFor(provider)
     }
 
     /// Shows current data immediately, then indexes off the main thread and recomputes when done.

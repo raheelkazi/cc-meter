@@ -61,4 +61,15 @@ final class UsageEventStoreTests: XCTestCase {
         let reopened = FileUsageEventStore(url: url, retention: 60, now: { clock })
         XCTAssertEqual(Set(reopened.events(since: .distantPast).map(\.dedupKey)), ["keep1", "keep2"])
     }
+
+    func testLoadDedupsDuplicateLinesOnDisk() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ccm-dup-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let line = try JSONEncoder().encode(event("k1", at: start))
+        var payload = Data(); payload.append(line); payload.append(0x0A); payload.append(line); payload.append(0x0A)
+        try payload.write(to: url)
+        let store = FileUsageEventStore(url: url, now: { self.start })
+        XCTAssertEqual(store.events(since: .distantPast).count, 1, "duplicate lines on disk are collapsed on load")
+    }
 }

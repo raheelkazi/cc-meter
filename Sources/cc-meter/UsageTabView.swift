@@ -10,7 +10,7 @@ struct UsageTabView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             controls
-            if !model.logsPresent(model.provider) {
+            if !model.currentLogsPresent {
                 Text("No \(model.provider.displayName) usage logs found.")
                     .font(.caption).foregroundStyle(.secondary)
             } else if !model.hasIndexed {

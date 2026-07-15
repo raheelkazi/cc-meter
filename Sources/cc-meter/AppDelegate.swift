@@ -179,9 +179,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if preferences.launchAtLogin != previous.launchAtLogin {
             LoginItem.setEnabled(preferences.launchAtLogin)
         }
-        if !preferences.usageBreakdownEnabled {
-            usageIndexTimer?.invalidate()
-            usageIndexTimer = nil
-        }
     }
 }

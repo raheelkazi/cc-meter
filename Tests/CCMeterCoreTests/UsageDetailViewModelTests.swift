@@ -60,11 +60,12 @@ final class UsageDetailViewModelTests: XCTestCase {
         XCTAssertEqual(store.events(since: .distantPast).map(\.dedupKey), ["tick"])
     }
 
-    func testLogsPresentReflectsInjectedClosure() {
+    func testCurrentLogsPresentReflectsInjectedClosureAndProvider() {
         let vm = UsageDetailViewModel(store: InMemoryUsageEventStore(now: { self.now }),
                                       resetsAt: { _, _ in nil }, indexerTick: {},
                                       logsPresent: { $0 == .claude }, now: { self.now })
-        XCTAssertTrue(vm.logsPresent(.claude))
-        XCTAssertFalse(vm.logsPresent(.codex))
+        XCTAssertTrue(vm.currentLogsPresent)   // provider defaults to .claude
+        vm.provider = .codex
+        XCTAssertFalse(vm.currentLogsPresent)
     }
 }

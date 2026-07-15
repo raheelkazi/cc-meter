@@ -56,4 +56,15 @@ final class UsageBreakdownTests: XCTestCase {
                                             windowStart: windowStart, now: now)
         XCTAssertNil(b.notionalCost)
     }
+
+    func testNotionalCostNilWhenAnyModelUnpriced() {
+        let events = [
+            event("p", "claude-opus-4-8", input: 100, at: windowStart.addingTimeInterval(60)),
+            UsageEvent(provider: .claude, at: windowStart.addingTimeInterval(120), project: "p",
+                       model: "future-unpriced-model", tokens: TokenCounts(input: 50), dedupKey: "u"),
+        ]
+        let b = UsageBreakdownBuilder.build(events: events, provider: .claude, window: .fiveHour,
+                                            windowStart: windowStart, now: now)
+        XCTAssertNil(b.notionalCost, "a window mixing priced and unpriced models must not show a partial dollar figure")
+    }
 }

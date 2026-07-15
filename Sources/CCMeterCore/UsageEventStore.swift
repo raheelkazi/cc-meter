@@ -52,8 +52,13 @@ public final class FileUsageEventStore: UsageEventStoring {
     private static func load(_ url: URL) -> [UsageEvent] {
         guard let data = try? Data(contentsOf: url), !data.isEmpty else { return [] }
         let decoder = JSONDecoder()
-        return data.split(separator: UInt8(ascii: "\n"))
-            .compactMap { try? decoder.decode(UsageEvent.self, from: Data($0)) }
+        var seen = Set<String>()
+        var out: [UsageEvent] = []
+        for line in data.split(separator: UInt8(ascii: "\n")) {
+            guard let event = try? decoder.decode(UsageEvent.self, from: Data(line)) else { continue }
+            if seen.insert(event.dedupKey).inserted { out.append(event) }
+        }
+        return out
     }
 
     public func flush() { Self.io.sync {} }
