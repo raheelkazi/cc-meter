@@ -9,6 +9,18 @@ public func shortModelToken(_ model: String) -> String {
     model.split(separator: "-").last.map(String.init) ?? model
 }
 
+/// A friendly model label for the usage breakdown. Claude names collapse to their family
+/// ("claude-opus-4-8" -> "opus"); everything else keeps its trailing token ("gpt-5.6-sol" ->
+/// "sol"). `shortModelToken` alone returns "8"/"5" for Claude names - the version digit, which
+/// tells the reader nothing.
+public func modelFamilyLabel(_ model: String) -> String {
+    let lower = model.lowercased()
+    for family in ["opus", "sonnet", "haiku", "fable"] where lower.contains(family) {
+        return family
+    }
+    return shortModelToken(model)
+}
+
 /// "5-hour" -> "5h", "7-day" -> "7d". Anything unrecognised is left alone.
 public func compactWindowToken(_ window: String) -> String {
     for (suffix, short) in [("-hour", "h"), ("-day", "d")] {

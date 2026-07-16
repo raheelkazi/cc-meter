@@ -31,13 +31,18 @@ public struct UsageBreakdown: Equatable {
     public let window: UsageWindow
     public let totalTokens: Int
     public let notionalCost: Double?
+    /// True when the cost covers only some of the window's tokens because at least one in-window
+    /// model is unpriced (e.g. priced Claude models mixed with unpriced fable/Codex).
+    public let costIsPartial: Bool
     public let projects: [ProjectUsage]
     public let models: [ModelUsage]
     public let buckets: [UsageBucket]
     public init(provider: UsageProvider, window: UsageWindow, totalTokens: Int, notionalCost: Double?,
-                projects: [ProjectUsage], models: [ModelUsage], buckets: [UsageBucket]) {
+                projects: [ProjectUsage], models: [ModelUsage], buckets: [UsageBucket],
+                costIsPartial: Bool = false) {
         self.provider = provider; self.window = window; self.totalTokens = totalTokens
         self.notionalCost = notionalCost; self.projects = projects; self.models = models; self.buckets = buckets
+        self.costIsPartial = costIsPartial
     }
 }
 
@@ -80,7 +85,8 @@ public enum UsageBreakdownBuilder {
         let buckets = bucketTokens.enumerated().map { UsageBucket(index: $0.offset, tokens: $0.element) }
 
         return UsageBreakdown(provider: provider, window: window, totalTokens: total,
-                              notionalCost: (anyPriced && !anyUnpriced) ? cost : nil,
-                              projects: projects, models: models, buckets: buckets)
+                              notionalCost: anyPriced ? cost : nil,
+                              projects: projects, models: models, buckets: buckets,
+                              costIsPartial: anyPriced && anyUnpriced)
     }
 }
