@@ -4,13 +4,17 @@ import Combine
 import CCMeterCore
 
 @MainActor
-final class MenuBarController {
+final class MenuBarController: NSObject, NSPopoverDelegate {
     private let statusItem: NSStatusItem
     private let popover = NSPopover()
     private let dashboard: DashboardViewModel
     private let onOpenSettings: () -> Void
     private let usageModel: UsageDetailViewModel?
     private var cancellables = Set<AnyCancellable>()
+    /// Global mouse-down monitor that dismisses the popover on an outside click. NSPopover's own
+    /// `.transient` dismissal is defeated by `pinPopover` repositioning the window, so we close it
+    /// ourselves when a click lands outside it (another app, the desktop, a different window).
+    private var outsideClickMonitor: Any?
 
     init(dashboard: DashboardViewModel, usageModel: UsageDetailViewModel? = nil,
          onOpenSettings: @escaping () -> Void = {}) {
@@ -18,6 +22,7 @@ final class MenuBarController {
         self.usageModel = usageModel
         self.onOpenSettings = onOpenSettings
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        super.init()
     }
 
     func install() {
@@ -26,6 +31,7 @@ final class MenuBarController {
             button.action = #selector(togglePopover)
         }
         popover.behavior = .transient
+        popover.delegate = self
         let root = PopoverView(dashboard: dashboard, usageModel: usageModel, onOpenSettings: { [weak self] in
             self?.popover.performClose(nil)
             self?.onOpenSettings()
@@ -84,7 +90,32 @@ final class MenuBarController {
                 self.pinPopover(to: button)
             }
             popover.contentViewController?.view.window?.makeKey()
+            startOutsideClickMonitor()
         }
+    }
+
+    /// A global monitor sees only clicks destined for OTHER apps, so a click inside the popover
+    /// (this app) leaves it open while a click anywhere outside closes it.
+    private func startOutsideClickMonitor() {
+        stopOutsideClickMonitor()
+        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown]
+        ) { [weak self] _ in
+            self?.popover.performClose(nil)
+        }
+    }
+
+    private func stopOutsideClickMonitor() {
+        if let monitor = outsideClickMonitor {
+            NSEvent.removeMonitor(monitor)
+            outsideClickMonitor = nil
+        }
+    }
+
+    /// Every close path (outside click, toggle, Settings, reset) funnels here, so the monitor is
+    /// always torn down exactly when the popover goes away.
+    func popoverDidClose(_ notification: Notification) {
+        stopOutsideClickMonitor()
     }
 
     private func pinPopover(to button: NSStatusBarButton) {
