@@ -1,7 +1,7 @@
 # cc-meter
 
 A native macOS menu bar app that shows your Claude Code and OpenAI Codex usage
-limits in real time.
+limits, token spend, and provider status in real time.
 
 <p align="center">
   <img src="docs/popover.png" width="376"
@@ -20,6 +20,13 @@ When a limit does go critical, an alert line appears above the list naming the
 one that will run out first, and it disappears again once the limit clears. It
 is the only thing that ever changes the panel's shape, which is what makes it
 worth noticing.
+
+A **Usage** tab (toggle at the top of the panel) breaks down how many tokens you
+have actually spent in the current window - by project and by model - parsed from
+Claude Code's and Codex's local session logs, with a small tokens-over-window chart
+and a notional API-price estimate. And when a provider itself is degraded, the
+menu-bar dot turns into a ⚠ and an incident banner links you to the status page, so
+you can tell "is it me or is the provider down?" at a glance.
 
 cc-meter automatically detects signed-in providers. For Claude Code it reads the
 OAuth token stored by the `claude` CLI in your macOS Keychain. For Codex it uses
@@ -85,6 +92,15 @@ Usage refreshes every minute by default (configurable in Settings).
 - **Dual-provider live meter** for Claude Code and Codex quota windows, including
   named or model-specific limits, color-coded green/amber/red with a reset
   countdown.
+- **Usage & cost breakdown** (Usage tab): real token consumption per project and
+  per model in the current 5h / 7d window, a tokens-over-window chart, and a
+  notional "≈ $ on API rates" estimate (a `partial` marker when some in-window
+  models are unpriced) - parsed from local Claude Code / Codex session logs. Toggle
+  it off in Settings.
+- **Provider incident status**: polls the Claude and OpenAI status pages and shows a
+  ⚠ in the menu bar plus a linked incident banner in the popover when the component
+  you depend on (Claude Code / Claude API / Codex API) is degraded. It keeps the last
+  known status on a failed fetch, so your own network blips never raise a false alarm.
 - **Automatic detection and isolation**: Codex stays hidden when it is absent or
   signed out, and one provider's failure never blanks valid data from the other.
 - **Threshold notifications**: get a macOS notification when a limit crosses
