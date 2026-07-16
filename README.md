@@ -4,8 +4,10 @@ A native macOS menu bar app that shows your Claude Code and OpenAI Codex usage
 limits, token spend, and provider status in real time.
 
 <p align="center">
-  <img src="docs/popover.png" width="376"
-       alt="The cc-meter popover: Claude Code and Codex usage limits, one line per provider, each showing the quota window, percent used, and time to reset.">
+  <img src="docs/popover.png" width="330"
+       alt="The cc-meter Limits view: Claude Code and Codex quota windows, one line per provider, each showing the window, percent used, and time to reset.">
+  <img src="docs/usage.png" width="330"
+       alt="The cc-meter Usage tab: tokens spent in the current window by project and by model, a tokens-over-window chart, a per-model split, and a notional API-price estimate.">
 </p>
 
 Click the menu bar item and every limit you have is there, one line per provider.
