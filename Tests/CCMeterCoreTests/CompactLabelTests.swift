@@ -13,6 +13,15 @@ final class CompactLabelTests: XCTestCase {
         XCTAssertEqual(shortModelToken("Fable"), "Fable")
     }
 
+    func testModelFamilyLabelCollapsesClaudeNamesToTheFamily() {
+        XCTAssertEqual(modelFamilyLabel("claude-opus-4-8"), "opus")
+        XCTAssertEqual(modelFamilyLabel("claude-sonnet-5"), "sonnet")
+        XCTAssertEqual(modelFamilyLabel("claude-fable-5"), "fable")
+        XCTAssertEqual(modelFamilyLabel("claude-haiku-4-5"), "haiku")
+        // Non-Claude names keep their meaningful trailing token.
+        XCTAssertEqual(modelFamilyLabel("gpt-5.6-sol"), "sol")
+    }
+
     func testWindowTokenAbbreviatesHoursAndDays() {
         XCTAssertEqual(compactWindowToken("5-hour"), "5h")
         XCTAssertEqual(compactWindowToken("7-day"), "7d")

@@ -55,9 +55,10 @@ final class UsageBreakdownTests: XCTestCase {
         let b = UsageBreakdownBuilder.build(events: events, provider: .codex, window: .fiveHour,
                                             windowStart: windowStart, now: now)
         XCTAssertNil(b.notionalCost)
+        XCTAssertFalse(b.costIsPartial)
     }
 
-    func testNotionalCostNilWhenAnyModelUnpriced() {
+    func testCostIsPartialWhenSomeModelsPricedAndSomeNot() {
         let events = [
             event("p", "claude-opus-4-8", input: 100, at: windowStart.addingTimeInterval(60)),
             UsageEvent(provider: .claude, at: windowStart.addingTimeInterval(120), project: "p",
@@ -65,6 +66,17 @@ final class UsageBreakdownTests: XCTestCase {
         ]
         let b = UsageBreakdownBuilder.build(events: events, provider: .claude, window: .fiveHour,
                                             windowStart: windowStart, now: now)
-        XCTAssertNil(b.notionalCost, "a window mixing priced and unpriced models must not show a partial dollar figure")
+        // The priced portion (opus) is shown and flagged partial, not blanked to n/a by the 33% unpriced.
+        XCTAssertNotNil(b.notionalCost)
+        XCTAssertEqual(b.notionalCost!, 100 * 15.0 / 1_000_000, accuracy: 1e-9)
+        XCTAssertTrue(b.costIsPartial)
+    }
+
+    func testCostNotPartialWhenAllModelsPriced() {
+        let events = [event("p", "claude-opus-4-8", input: 100, at: windowStart.addingTimeInterval(60))]
+        let b = UsageBreakdownBuilder.build(events: events, provider: .claude, window: .fiveHour,
+                                            windowStart: windowStart, now: now)
+        XCTAssertNotNil(b.notionalCost)
+        XCTAssertFalse(b.costIsPartial)
     }
 }

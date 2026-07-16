@@ -79,18 +79,21 @@ struct UsageTabView: View {
     }
 
     private func modelSplit(_ b: UsageBreakdown) -> some View {
-        HStack(spacing: 8) {
-            ForEach(b.models.prefix(3), id: \.model) { m in
-                Text("\(shortModelToken(m.model)) \(Int((m.share * 100).rounded()))%")
-                    .font(.caption2).foregroundStyle(.secondary)
-            }
-        }
+        let parts = b.models.prefix(3).map { "\(modelFamilyLabel($0.model)) \(Int(($0.share * 100).rounded()))%" }
+        return Text(parts.joined(separator: " · "))
+            .font(.caption2).foregroundStyle(.secondary)
     }
 
     private func costLine(_ b: UsageBreakdown) -> some View {
-        Text(b.notionalCost.map { "≈ \(Self.money($0)) on API rates" } ?? "≈ cost n/a (unpriced model)")
+        let text: String
+        if let cost = b.notionalCost {
+            text = "≈ \(Self.money(cost)) on API rates" + (b.costIsPartial ? " · partial" : "")
+        } else {
+            text = "≈ cost n/a (unpriced model)"
+        }
+        return Text(text)
             .font(.caption2).foregroundStyle(.tertiary)
-            .help("Estimate at public API prices as of \(ModelPriceTable.pricesAsOf). Notional on a subscription; token share approximates quota share. Unpriced models (e.g. Codex) show n/a.")
+            .help("Estimate at public API prices as of \(ModelPriceTable.pricesAsOf). Notional on a subscription; token share approximates quota share. \"partial\" = some in-window models (e.g. Codex or newer models) are unpriced and excluded; \"n/a\" = none were priced.")
     }
 
     private static func compact(_ n: Int) -> String {
