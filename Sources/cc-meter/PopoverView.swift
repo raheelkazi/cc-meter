@@ -52,6 +52,9 @@ struct PopoverView: View {
         }
         .padding(14)
         .frame(width: 360)
+        // Opaque fill so the popover's vibrancy material cannot bleed the color of whatever is
+        // behind it (a blue window/wallpaper tinted the whole panel blue). Adapts to light/dark.
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     // MARK: - Status banners
