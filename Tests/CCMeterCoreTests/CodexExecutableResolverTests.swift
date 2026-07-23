@@ -58,6 +58,18 @@ final class CodexExecutableResolverTests: XCTestCase {
         XCTAssertEqual(spy.callCount, 0, "the static fast path must not pay for a shell spawn")
     }
 
+    func testDefaultCandidatesIncludeSystemAndUserChatGPTBundles() {
+        let home = URL(fileURLWithPath: "/Users/tester")
+        let candidates = CodexExecutableResolver.defaultCandidates(home: home)
+
+        XCTAssertTrue(candidates.contains(
+            URL(fileURLWithPath: "/Applications/ChatGPT.app/Contents/Resources/codex")
+        ))
+        XCTAssertTrue(candidates.contains(
+            home.appendingPathComponent("Applications/ChatGPT.app/Contents/Resources/codex")
+        ))
+    }
+
     /// The exec half of the bug: npm ships codex as a `#!/usr/bin/env node` script, so the
     /// child needs `node` on its PATH. node sits beside codex, so the executable's own
     /// directory must always be on the search path we hand to the transport.

@@ -60,15 +60,20 @@ public struct CodexExecutableResolver: CodexExecutableResolving {
         return nil
     }
 
-    private static func defaultCandidates() -> [URL] {
-        let home = FileManager.default.homeDirectoryForCurrentUser
+    static func defaultCandidates(home: URL) -> [URL] {
         return [
             URL(fileURLWithPath: "/Applications/Codex.app/Contents/Resources/codex"),
             home.appendingPathComponent("Applications/Codex.app/Contents/Resources/codex"),
+            URL(fileURLWithPath: "/Applications/ChatGPT.app/Contents/Resources/codex"),
+            home.appendingPathComponent("Applications/ChatGPT.app/Contents/Resources/codex"),
             URL(fileURLWithPath: "/opt/homebrew/bin/codex"),
             URL(fileURLWithPath: "/usr/local/bin/codex"),
             home.appendingPathComponent(".local/bin/codex")
         ]
+    }
+
+    private static func defaultCandidates() -> [URL] {
+        defaultCandidates(home: FileManager.default.homeDirectoryForCurrentUser)
     }
 }
 
